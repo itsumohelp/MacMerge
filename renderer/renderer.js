@@ -9,19 +9,33 @@ class VirtualScroller {
     this.rows = rows;
     this.container = container;
 
-    // Spacer div maintains total scroll height
-    this.spacer = document.createElement('div');
-    this.spacer.style.cssText = `height:${rows.length * ROW_HEIGHT}px;pointer-events:none;width:1px;`;
+    // hSplit: flex row – its min-height drives the container's scroll height
+    this.hSplit = document.createElement('div');
+    this.hSplit.className = 'diff-h-split';
+    this.hSplit.style.minHeight = `${rows.length * ROW_HEIGHT}px`;
 
-    // Visible table positioned absolutely within container
-    this.table = document.createElement('table');
-    this.table.className = 'diff-table';
-    this.table.style.cssText = 'position:absolute;top:0;left:0;right:0;';
-    this.tbody = document.createElement('tbody');
-    this.table.appendChild(this.tbody);
+    // Left / right halves – each scrolls independently on the X axis
+    this.leftWrap  = document.createElement('div');
+    this.rightWrap = document.createElement('div');
+    this.leftWrap.className  = 'diff-left-wrap';
+    this.rightWrap.className = 'diff-right-wrap';
 
-    container.appendChild(this.spacer);
-    container.appendChild(this.table);
+    // One table per side, absolutely positioned within its half
+    this.tableL = document.createElement('table');
+    this.tableR = document.createElement('table');
+    this.tableL.className = this.tableR.className = 'diff-table';
+    this.tableL.style.cssText = this.tableR.style.cssText =
+      'position:absolute;top:0;left:0;min-width:100%;';
+    this.tbodyL = document.createElement('tbody');
+    this.tbodyR = document.createElement('tbody');
+    this.tableL.appendChild(this.tbodyL);
+    this.tableR.appendChild(this.tbodyR);
+
+    this.leftWrap.appendChild(this.tableL);
+    this.rightWrap.appendChild(this.tableR);
+    this.hSplit.appendChild(this.leftWrap);
+    this.hSplit.appendChild(this.rightWrap);
+    container.appendChild(this.hSplit);
 
     this._start = -1;
     this._end   = -1;
@@ -39,31 +53,45 @@ class VirtualScroller {
     this._start = start;
     this._end   = end;
 
-    this.table.style.top = `${start * ROW_HEIGHT}px`;
-    const frag = document.createDocumentFragment();
-    for (let i = start; i < end; i++) frag.appendChild(this._makeRow(this.rows[i]));
-    this.tbody.replaceChildren(frag);
+    const topPx = `${start * ROW_HEIGHT}px`;
+    this.tableL.style.top = this.tableR.style.top = topPx;
+
+    const fragL = document.createDocumentFragment();
+    const fragR = document.createDocumentFragment();
+    for (let i = start; i < end; i++) {
+      const [trL, trR] = this._makeRow(this.rows[i]);
+      fragL.appendChild(trL);
+      fragR.appendChild(trR);
+    }
+    this.tbodyL.replaceChildren(fragL);
+    this.tbodyR.replaceChildren(fragR);
   }
 
   _makeRow(row) {
-    const tr = document.createElement('tr');
-    tr.style.height = ROW_HEIGHT + 'px';
+    const trL = document.createElement('tr');
+    const trR = document.createElement('tr');
+    trL.style.height = trR.style.height = ROW_HEIGHT + 'px';
+
     if (row.type === 'same') {
-      tr.className = 'diff-row-same';
-      tr.innerHTML = `<td class="diff-ln">${row.leftNum}</td><td class="diff-code">${row.leftHtml}</td><td class="diff-ln">${row.rightNum}</td><td class="diff-code">${row.rightHtml}</td>`;
+      trL.className = trR.className = 'diff-row-same';
+      trL.innerHTML = `<td class="diff-ln">${row.leftNum}</td><td class="diff-code">${row.leftHtml}</td>`;
+      trR.innerHTML = `<td class="diff-ln">${row.rightNum}</td><td class="diff-code">${row.rightHtml}</td>`;
     } else if (row.type === 'change') {
-      tr.className = 'diff-row-change';
-      tr.dataset.row = row.rowIdx;
-      tr.title = 'ダブルクリックで詳細表示';
-      tr.innerHTML = `<td class="diff-ln diff-ln-del">${row.leftNum}</td><td class="diff-code diff-code-del">${row.leftHtml}</td><td class="diff-ln diff-ln-ins">${row.rightNum}</td><td class="diff-code diff-code-ins">${row.rightHtml}</td>`;
+      trL.className = trR.className = 'diff-row-change';
+      trL.dataset.row = trR.dataset.row = row.rowIdx;
+      trL.title = trR.title = 'ダブルクリックで詳細表示';
+      trL.innerHTML = `<td class="diff-ln diff-ln-del">${row.leftNum}</td><td class="diff-code diff-code-del">${row.leftHtml}</td>`;
+      trR.innerHTML = `<td class="diff-ln diff-ln-ins">${row.rightNum}</td><td class="diff-code diff-code-ins">${row.rightHtml}</td>`;
     } else if (row.type === 'removed') {
-      tr.className = 'diff-row-change';
-      tr.innerHTML = `<td class="diff-ln diff-ln-del">${row.leftNum}</td><td class="diff-code diff-code-del">${row.leftHtml}</td><td class="diff-ln"></td><td class="diff-code diff-code-empty"></td>`;
-    } else {
-      tr.className = 'diff-row-change';
-      tr.innerHTML = `<td class="diff-ln"></td><td class="diff-code diff-code-empty"></td><td class="diff-ln diff-ln-ins">${row.rightNum}</td><td class="diff-code diff-code-ins">${row.rightHtml}</td>`;
+      trL.className = trR.className = 'diff-row-change';
+      trL.innerHTML = `<td class="diff-ln diff-ln-del">${row.leftNum}</td><td class="diff-code diff-code-del">${row.leftHtml}</td>`;
+      trR.innerHTML = `<td class="diff-ln"></td><td class="diff-code diff-code-empty"></td>`;
+    } else { // added
+      trL.className = trR.className = 'diff-row-change';
+      trL.innerHTML = `<td class="diff-ln"></td><td class="diff-code diff-code-empty"></td>`;
+      trR.innerHTML = `<td class="diff-ln diff-ln-ins">${row.rightNum}</td><td class="diff-code diff-code-ins">${row.rightHtml}</td>`;
     }
-    return tr;
+    return [trL, trR];
   }
 }
 
@@ -355,24 +383,12 @@ function buildRows(leftContent, rightContent) {
 
     const pairCount = Math.min(leftLines.length, rightLines.length);
 
-    // Paired lines → character-level diff
+    // Paired lines → store text for double-click detail; plain HTML in main table
     for (let j = 0; j < pairCount; j++) {
-      const charDiff = Diff.diffChars(leftLines[j], rightLines[j]);
-      let leftHtml = '', rightHtml = '';
-      for (const c of charDiff) {
-        if (c.removed) {
-          leftHtml  += `<mark class="diff-del">${escHtml(c.value)}</mark>`;
-        } else if (c.added) {
-          rightHtml += `<mark class="diff-ins">${escHtml(c.value)}</mark>`;
-        } else {
-          const esc = escHtml(c.value);
-          leftHtml  += esc;
-          rightHtml += esc;
-        }
-      }
       const rowIdx = rowDataStore.length;
       rowDataStore.push({ leftText: leftLines[j], rightText: rightLines[j] });
-      rows.push({ type: 'change', leftNum: leftNum++, rightNum: rightNum++, leftHtml, rightHtml, rowIdx });
+      rows.push({ type: 'change', leftNum: leftNum++, rightNum: rightNum++,
+                  leftHtml: escHtml(leftLines[j]), rightHtml: escHtml(rightLines[j]), rowIdx });
     }
 
     // Unpaired removed lines
@@ -416,8 +432,20 @@ function mountSideBySideDiff(container, leftLabel, rightLabel, leftContent, righ
     const tableWrap = document.createElement('div');
     tableWrap.className = 'diff-table-wrap';
     wrapper.appendChild(tableWrap);
-    new VirtualScroller(tableWrap, rows);
+    const vs = new VirtualScroller(tableWrap, rows);
     attachDblClickHandler(tableWrap);
+    // Sync horizontal scroll between left and right halves
+    let hSync = false;
+    vs.leftWrap.addEventListener('scroll', () => {
+      if (hSync) return; hSync = true;
+      vs.rightWrap.scrollLeft = vs.leftWrap.scrollLeft;
+      hSync = false;
+    }, { passive: true });
+    vs.rightWrap.addEventListener('scroll', () => {
+      if (hSync) return; hSync = true;
+      vs.leftWrap.scrollLeft = vs.rightWrap.scrollLeft;
+      hSync = false;
+    }, { passive: true });
   }
 
   container.innerHTML = '';
