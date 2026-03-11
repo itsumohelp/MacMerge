@@ -11,4 +11,7 @@ contextBridge.exposeInMainWorld('api', {
     ipcRenderer.removeAllListeners('dir-entry');
     ipcRenderer.removeAllListeners('dir-compare-done');
   },
+  watchFiles:       (left, right) => ipcRenderer.invoke('watch-files', left, right),
+  onReloadFiles:    (cb) => ipcRenderer.on('reload-files', () => cb()),
+  offReloadFiles:   () => ipcRenderer.removeAllListeners('reload-files'),
 });

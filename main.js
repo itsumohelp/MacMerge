@@ -1,6 +1,10 @@
-const { app, BrowserWindow, ipcMain, screen } = require('electron');
+const { app, BrowserWindow, ipcMain, screen, dialog } = require('electron');
 const path = require('path');
 const fs = require('fs');
+
+// Watched file state: { left: {path, mtime} | null, right: {path, mtime} | null }
+let watchedFiles = { left: null, right: null };
+let dialogShowing = false;
 
 function createWindow() {
   const { width, height } = screen.getPrimaryDisplay().workAreaSize;
@@ -19,6 +23,43 @@ function createWindow() {
   });
 
   win.loadFile(path.join(__dirname, 'renderer', 'index.html'));
+
+  // Check for file changes when the window regains focus
+  win.on('focus', async () => {
+    if (dialogShowing) return;
+    const changed = [];
+    for (const side of ['left', 'right']) {
+      const w = watchedFiles[side];
+      if (!w) continue;
+      try {
+        const mtime = fs.statSync(w.path).mtimeMs;
+        if (mtime !== w.mtime) changed.push(w.path);
+      } catch { /* file deleted or inaccessible */ }
+    }
+    if (changed.length === 0) return;
+
+    dialogShowing = true;
+    const { response } = await dialog.showMessageBox(win, {
+      type: 'question',
+      buttons: ['再読み込み', 'キャンセル'],
+      defaultId: 0,
+      cancelId: 1,
+      title: 'ファイルが更新されました',
+      message: 'ファイルが更新されました',
+      detail: changed.map(p => path.basename(p)).join('\n') + '\n\n再度読み込みますか？',
+    });
+    dialogShowing = false;
+
+    // Update stored mtimes regardless of choice (avoid repeated prompts)
+    for (const side of ['left', 'right']) {
+      const w = watchedFiles[side];
+      if (w) { try { w.mtime = fs.statSync(w.path).mtimeMs; } catch { /* ignore */ } }
+    }
+
+    if (response === 0) {
+      win.webContents.send('reload-files');
+    }
+  });
 }
 
 app.whenReady().then(() => {
@@ -33,6 +74,13 @@ app.on('window-all-closed', () => {
 });
 
 // ---- IPC handlers ----
+
+// Register the two files currently being compared for change detection
+ipcMain.handle('watch-files', (_event, leftPath, rightPath) => {
+  watchedFiles.left  = leftPath  ? { path: leftPath,  mtime: statSafe(leftPath)?.mtimeMs  ?? 0 } : null;
+  watchedFiles.right = rightPath ? { path: rightPath, mtime: statSafe(rightPath)?.mtimeMs ?? 0 } : null;
+  return { ok: true };
+});
 
 function statSafe(p) {
   try { return fs.statSync(p); } catch { return null; }
