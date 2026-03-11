@@ -1,14 +1,16 @@
-const { app, BrowserWindow, ipcMain } = require('electron');
+const { app, BrowserWindow, ipcMain, screen } = require('electron');
 const path = require('path');
 const fs = require('fs');
 
 function createWindow() {
+  const { width, height } = screen.getPrimaryDisplay().workAreaSize;
   const win = new BrowserWindow({
-    width: 1400,
-    height: 900,
-    minWidth: 800,
-    minHeight: 600,
+    width: Math.round(width * 0.5),
+    height: Math.round(height * 0.5),
+    minWidth: 600,
+    minHeight: 400,
     title: 'MacMerge',
+    icon: path.join(__dirname, 'assets', 'icon.icns'),
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,

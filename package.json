@@ -1,6 +1,6 @@
 {
   "name": "macmerge",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "",
   "main": "main.js",
   "scripts": {
@@ -10,6 +10,7 @@
   "build": {
     "appId": "com.macmerge.app",
     "productName": "MacMerge",
+    "icon": "assets/icon.icns",
     "mac": {
       "category": "public.app-category.developer-tools",
       "target": [{ "target": "dmg", "arch": "universal" }]
@@ -18,6 +19,7 @@
       "main.js",
       "preload.js",
       "renderer/**/*",
+      "assets/icon.icns",
       "node_modules/**/*"
     ]
   },
