@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline';" />
+  <title>MacMerge</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div id="app">
+    <!-- ======== DROP SCREEN ======== -->
+    <div id="drop-screen">
+      <div class="app-title">MacMerge</div>
+      <div class="app-subtitle">2つのファイルまたはフォルダをドロップして比較</div>
+
+      <div class="drop-row">
+        <div class="drop-zone" id="drop-left" data-side="left">
+          <div class="drop-icon">⬛</div>
+          <div class="drop-label">左 (Before)</div>
+          <div class="drop-hint">ファイルまたはフォルダをドロップ</div>
+          <div class="drop-path" id="path-left"></div>
+        </div>
+
+        <div class="drop-arrow">⟷</div>
+
+        <div class="drop-zone" id="drop-right" data-side="right">
+          <div class="drop-icon">⬛</div>
+          <div class="drop-label">右 (After)</div>
+          <div class="drop-hint">ファイルまたはフォルダをドロップ</div>
+          <div class="drop-path" id="path-right"></div>
+        </div>
+      </div>
+
+      <button id="compare-btn" disabled>比較する</button>
+      <div id="drop-error" class="error-msg"></div>
+    </div>
+
+    <!-- ======== LINE DETAIL PANEL (fixed bottom) ======== -->
+    <div id="line-detail" class="hidden">
+      <div class="ldp-header">
+        <span class="ldp-title">差分詳細　<span class="ldp-hint">ダブルクリックで表示</span></span>
+        <button id="close-ldp">✕</button>
+      </div>
+      <div class="ldp-row">
+        <span class="ldp-label ldp-del-label">Before</span>
+        <div class="ldp-content" id="ldp-before"></div>
+      </div>
+      <div class="ldp-row">
+        <span class="ldp-label ldp-ins-label">After</span>
+        <div class="ldp-content" id="ldp-after"></div>
+      </div>
+    </div>
+
+    <!-- ======== RESULT SCREEN ======== -->
+    <div id="result-screen" class="hidden">
+      <div class="toolbar">
+        <button id="back-btn">← 戻る</button>
+        <span id="result-title" class="result-title"></span>
+        <span id="result-summary" class="result-summary"></span>
+      </div>
+
+      <!-- Directory tree view -->
+      <div id="dir-view" class="hidden">
+        <div id="dir-tree"></div>
+        <div id="dir-diff-panel" class="hidden">
+          <div class="diff-panel-header">
+            <span id="diff-panel-filename"></span>
+            <button id="close-diff-panel">✕</button>
+          </div>
+          <div id="diff-panel-content"></div>
+        </div>
+      </div>
+
+      <!-- File diff view -->
+      <div id="file-view" class="hidden">
+        <div id="file-diff-content"></div>
+      </div>
+    </div>
+  </div>
+
+  <script src="../node_modules/diff/dist/diff.js"></script>
+  <script src="renderer.js"></script>
+</body>
+</html>
