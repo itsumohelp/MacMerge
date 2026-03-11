@@ -271,6 +271,22 @@ backBtn.addEventListener('click', () => {
   dirDiffPanel.classList.add('hidden');
   lineDetail.classList.add('hidden');
   compareBtn.disabled = false;
+  // Stop watching files when returning to drop screen
+  window.api.watchFiles(null, null);
+});
+
+// ---- File change reload (triggered by main process after focus check) ----
+window.api.onReloadFiles(() => {
+  if (state.left?.type === 'file' && state.right?.type === 'file') {
+    // Save current scroll position before rebuilding the diff
+    const restoreScroll = {
+      scrollTop:  _fileTableWrap ? _fileTableWrap.scrollTop : 0,
+      scrollLeft: _fileVs        ? _fileVs.leftWrap.scrollLeft : 0,
+    };
+    lineDetail.classList.add('hidden');
+    runFileCompare(state.left.path, state.right.path, restoreScroll)
+      .catch(err => showError('エラー: ' + err.message));
+  }
 });
 
 // ---- Line detail panel ----
@@ -423,16 +439,17 @@ function mountSideBySideDiff(container, leftLabel, rightLabel, leftContent, righ
   `;
   wrapper.appendChild(header);
 
+  let tableWrap = null, vs = null;
   if (changedCount === 0) {
     const noChange = document.createElement('div');
     noChange.className = 'diff-no-change';
     noChange.textContent = '差分なし（ファイルは同一です）';
     wrapper.appendChild(noChange);
   } else {
-    const tableWrap = document.createElement('div');
+    tableWrap = document.createElement('div');
     tableWrap.className = 'diff-table-wrap';
     wrapper.appendChild(tableWrap);
-    const vs = new VirtualScroller(tableWrap, rows);
+    vs = new VirtualScroller(tableWrap, rows);
     attachDblClickHandler(tableWrap);
     // Sync horizontal scroll between left and right halves
     let hSync = false;
@@ -450,25 +467,50 @@ function mountSideBySideDiff(container, leftLabel, rightLabel, leftContent, righ
 
   container.innerHTML = '';
   container.appendChild(wrapper);
-  return rows;
+  return { rows, tableWrap, vs };
 }
 
+// Track current file diff scroll containers for position save/restore
+let _fileTableWrap = null;
+let _fileVs = null;
+
 // ---- File comparison ----
-async function runFileCompare(leftPath, rightPath) {
+async function runFileCompare(leftPath, rightPath, restoreScroll = null) {
   const result = await window.api.compareFiles(leftPath, rightPath);
   if (!result.ok) throw new Error(result.error);
 
   rowDataStore.length = 0;
-  const rows = mountSideBySideDiff(
+  const { rows, tableWrap, vs } = mountSideBySideDiff(
     fileDiffContent,
     leftPath, rightPath,
     result.leftContent, result.rightContent
   );
 
+  // Store refs for scroll save/restore on next reload
+  _fileTableWrap = tableWrap;
+  _fileVs = vs;
+
   resultTitle.textContent = `${leftPath}  ↔  ${rightPath}`;
   const added   = rows.filter(r => r.type === 'added'   || r.type === 'change').length;
   const removed = rows.filter(r => r.type === 'removed' || r.type === 'change').length;
   resultSummary.textContent = `+${added} / -${removed}`;
+
+  // Restore scroll position after reload (vertical immediately, horizontal after layout)
+  if (restoreScroll && tableWrap) {
+    const maxTop = tableWrap.scrollHeight - tableWrap.clientHeight;
+    tableWrap.scrollTop = Math.min(restoreScroll.scrollTop, Math.max(0, maxTop));
+    if (vs) {
+      requestAnimationFrame(() => {
+        const maxLeft = vs.leftWrap.scrollWidth - vs.leftWrap.clientWidth;
+        const left = Math.min(restoreScroll.scrollLeft, Math.max(0, maxLeft));
+        vs.leftWrap.scrollLeft = left;
+        vs.rightWrap.scrollLeft = left;
+      });
+    }
+  }
+
+  // Register files for change detection on window focus
+  window.api.watchFiles(leftPath, rightPath);
 
   fileView.classList.remove('hidden');
   dirView.classList.add('hidden');
@@ -560,7 +602,7 @@ async function openDirFileDiff(entry, itemEl) {
   const rightLabel = entry.rightFull || '(存在しない)';
 
   rowDataStore.length = 0;
-  mountSideBySideDiff(diffPanelContent, leftLabel, rightLabel, result.leftContent, result.rightContent);
+  const { rows: _rows } = mountSideBySideDiff(diffPanelContent, leftLabel, rightLabel, result.leftContent, result.rightContent);
 }
 
 closeDiffPanel.addEventListener('click', () => {
