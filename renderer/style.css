@@ -291,19 +291,36 @@ button, input, select { -webkit-app-region: no-drag; }
 .diff-file-sep { flex-shrink: 0; color: #45475a; }
 
 .diff-table-wrap {
-  overflow-x: auto;
   overflow-y: scroll;
+  overflow-x: hidden;
   flex: 1;
-  position: relative;
   min-height: 0;
 }
+/* Horizontal flex row – sets total scroll height */
+.diff-h-split { display: flex; }
+/* Left / right halves – each has independent horizontal scroll */
+.diff-left-wrap {
+  flex: 1;
+  overflow-x: auto;
+  position: relative;
+  min-width: 0;
+  border-right: 1px solid #313244;
+}
+.diff-right-wrap {
+  flex: 1;
+  overflow-x: auto;
+  position: relative;
+  min-width: 0;
+}
 .diff-table {
-  width: 100%;
+  min-width: 100%;
   border-collapse: collapse;
-  table-layout: fixed;
 }
 
 .diff-ln {
+  position: sticky;
+  left: 0;
+  z-index: 1;
   width: 44px;
   min-width: 44px;
   text-align: right;
@@ -320,15 +337,13 @@ button, input, select { -webkit-app-region: no-drag; }
   white-space: pre;
   color: #cdd6f4;
   vertical-align: top;
-  width: calc(50% - 44px);
-  overflow: hidden;
 }
 
 /* Changed line: left = del side, right = ins side */
-.diff-ln-del  { background: rgba(243,139,168,0.08); color: #f38ba8; }
-.diff-ln-ins  { background: rgba(166,227,161,0.08); color: #a6e3a1; }
-.diff-code-del  { background: rgba(243,139,168,0.05); }
-.diff-code-ins  { background: rgba(166,227,161,0.05); }
+.diff-ln-del  { background: rgba(243,139,168,0.18); color: #f38ba8; }
+.diff-ln-ins  { background: rgba(166,227,161,0.18); color: #a6e3a1; }
+.diff-code-del  { background: rgba(243,139,168,0.18); }
+.diff-code-ins  { background: rgba(166,227,161,0.18); }
 .diff-code-empty { background: #181825; }
 
 /* Character-level highlights */
@@ -402,6 +417,7 @@ mark.diff-ins {
 }
 #close-ldp:hover { color: #cdd6f4; }
 
+/* Stacked rows (Before / After) */
 .ldp-row {
   display: flex;
   align-items: stretch;
@@ -433,6 +449,7 @@ mark.diff-ins {
   font-size: 13px;
   white-space: pre;
   overflow-x: auto;
+  overflow-y: hidden;
   color: #cdd6f4;
   line-height: 1.5;
 }
