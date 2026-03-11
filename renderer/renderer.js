@@ -1,5 +1,72 @@
 /* renderer.js – MacMerge renderer process */
 
+// ---- Virtual Scroller ----
+const ROW_HEIGHT = 22;    // px per row (fixed height)
+const SCROLL_BUFFER = 30; // extra rows rendered above/below viewport
+
+class VirtualScroller {
+  constructor(container, rows) {
+    this.rows = rows;
+    this.container = container;
+
+    // Spacer div maintains total scroll height
+    this.spacer = document.createElement('div');
+    this.spacer.style.cssText = `height:${rows.length * ROW_HEIGHT}px;pointer-events:none;width:1px;`;
+
+    // Visible table positioned absolutely within container
+    this.table = document.createElement('table');
+    this.table.className = 'diff-table';
+    this.table.style.cssText = 'position:absolute;top:0;left:0;right:0;';
+    this.tbody = document.createElement('tbody');
+    this.table.appendChild(this.tbody);
+
+    container.appendChild(this.spacer);
+    container.appendChild(this.table);
+
+    this._start = -1;
+    this._end   = -1;
+    container.addEventListener('scroll', () => this._update(), { passive: true });
+    this._update();
+  }
+
+  _update() {
+    const scrollTop = this.container.scrollTop;
+    const viewH    = this.container.clientHeight;
+    const start = Math.max(0, Math.floor(scrollTop / ROW_HEIGHT) - SCROLL_BUFFER);
+    const end   = Math.min(this.rows.length, Math.ceil((scrollTop + viewH) / ROW_HEIGHT) + SCROLL_BUFFER);
+
+    if (start === this._start && end === this._end) return;
+    this._start = start;
+    this._end   = end;
+
+    this.table.style.top = `${start * ROW_HEIGHT}px`;
+    const frag = document.createDocumentFragment();
+    for (let i = start; i < end; i++) frag.appendChild(this._makeRow(this.rows[i]));
+    this.tbody.replaceChildren(frag);
+  }
+
+  _makeRow(row) {
+    const tr = document.createElement('tr');
+    tr.style.height = ROW_HEIGHT + 'px';
+    if (row.type === 'same') {
+      tr.className = 'diff-row-same';
+      tr.innerHTML = `<td class="diff-ln">${row.leftNum}</td><td class="diff-code">${row.leftHtml}</td><td class="diff-ln">${row.rightNum}</td><td class="diff-code">${row.rightHtml}</td>`;
+    } else if (row.type === 'change') {
+      tr.className = 'diff-row-change';
+      tr.dataset.row = row.rowIdx;
+      tr.title = 'ダブルクリックで詳細表示';
+      tr.innerHTML = `<td class="diff-ln diff-ln-del">${row.leftNum}</td><td class="diff-code diff-code-del">${row.leftHtml}</td><td class="diff-ln diff-ln-ins">${row.rightNum}</td><td class="diff-code diff-code-ins">${row.rightHtml}</td>`;
+    } else if (row.type === 'removed') {
+      tr.className = 'diff-row-change';
+      tr.innerHTML = `<td class="diff-ln diff-ln-del">${row.leftNum}</td><td class="diff-code diff-code-del">${row.leftHtml}</td><td class="diff-ln"></td><td class="diff-code diff-code-empty"></td>`;
+    } else {
+      tr.className = 'diff-row-change';
+      tr.innerHTML = `<td class="diff-ln"></td><td class="diff-code diff-code-empty"></td><td class="diff-ln diff-ln-ins">${row.rightNum}</td><td class="diff-code diff-code-ins">${row.rightHtml}</td>`;
+    }
+    return tr;
+  }
+}
+
 // ---- State ----
 const state = {
   left: null,   // { path, type: 'file'|'dir' }
@@ -152,10 +219,11 @@ async function doCompare() {
   try {
     if (state.left.type === 'file') {
       await runFileCompare(state.left.path, state.right.path);
+      showResultScreen();
     } else {
       await runDirCompare(state.left.path, state.right.path);
+      // showResultScreen() is called early inside runDirCompare for streaming
     }
-    showResultScreen();
   } catch (err) {
     showError('エラー: ' + err.message);
     compareBtn.disabled = false;
@@ -323,58 +391,38 @@ function buildRows(leftContent, rightContent) {
   return rows;
 }
 
-function renderSideBySideDiff(leftLabel, rightLabel, leftContent, rightContent) {
+function mountSideBySideDiff(container, leftLabel, rightLabel, leftContent, rightContent) {
   const rows = buildRows(leftContent, rightContent);
-
   const changedCount = rows.filter(r => r.type !== 'same').length;
-  if (changedCount === 0) {
-    return '<div class="diff-no-change">差分なし（ファイルは同一です）</div>';
-  }
 
-  let html = `
-    <div class="custom-diff">
-      <div class="diff-file-header">
-        <span class="diff-file-label diff-file-left">${escHtml(leftLabel)}</span>
-        <span class="diff-file-sep">↔</span>
-        <span class="diff-file-label diff-file-right">${escHtml(rightLabel)}</span>
-      </div>
-      <div class="diff-table-wrap"><table class="diff-table"><tbody>
+  const wrapper = document.createElement('div');
+  wrapper.className = 'custom-diff';
+
+  const header = document.createElement('div');
+  header.className = 'diff-file-header';
+  header.innerHTML = `
+    <span class="diff-file-label diff-file-left">${escHtml(leftLabel)}</span>
+    <span class="diff-file-sep">↔</span>
+    <span class="diff-file-label diff-file-right">${escHtml(rightLabel)}</span>
   `;
+  wrapper.appendChild(header);
 
-  for (const row of rows) {
-    if (row.type === 'same') {
-      html += `<tr class="diff-row-same">
-        <td class="diff-ln">${row.leftNum}</td>
-        <td class="diff-code">${row.leftHtml}</td>
-        <td class="diff-ln">${row.rightNum}</td>
-        <td class="diff-code">${row.rightHtml}</td>
-      </tr>`;
-    } else if (row.type === 'change') {
-      html += `<tr class="diff-row-change" data-row="${row.rowIdx}" title="ダブルクリックで詳細表示">
-        <td class="diff-ln diff-ln-del">${row.leftNum}</td>
-        <td class="diff-code diff-code-del">${row.leftHtml}</td>
-        <td class="diff-ln diff-ln-ins">${row.rightNum}</td>
-        <td class="diff-code diff-code-ins">${row.rightHtml}</td>
-      </tr>`;
-    } else if (row.type === 'removed') {
-      html += `<tr class="diff-row-change">
-        <td class="diff-ln diff-ln-del">${row.leftNum}</td>
-        <td class="diff-code diff-code-del">${row.leftHtml}</td>
-        <td class="diff-ln"></td>
-        <td class="diff-code diff-code-empty"></td>
-      </tr>`;
-    } else { // added
-      html += `<tr class="diff-row-change">
-        <td class="diff-ln"></td>
-        <td class="diff-code diff-code-empty"></td>
-        <td class="diff-ln diff-ln-ins">${row.rightNum}</td>
-        <td class="diff-code diff-code-ins">${row.rightHtml}</td>
-      </tr>`;
-    }
+  if (changedCount === 0) {
+    const noChange = document.createElement('div');
+    noChange.className = 'diff-no-change';
+    noChange.textContent = '差分なし（ファイルは同一です）';
+    wrapper.appendChild(noChange);
+  } else {
+    const tableWrap = document.createElement('div');
+    tableWrap.className = 'diff-table-wrap';
+    wrapper.appendChild(tableWrap);
+    new VirtualScroller(tableWrap, rows);
+    attachDblClickHandler(tableWrap);
   }
 
-  html += '</tbody></table></div></div>';
-  return html;
+  container.innerHTML = '';
+  container.appendChild(wrapper);
+  return rows;
 }
 
 // ---- File comparison ----
@@ -383,15 +431,13 @@ async function runFileCompare(leftPath, rightPath) {
   if (!result.ok) throw new Error(result.error);
 
   rowDataStore.length = 0;
-  fileDiffContent.innerHTML = renderSideBySideDiff(
+  const rows = mountSideBySideDiff(
+    fileDiffContent,
     leftPath, rightPath,
     result.leftContent, result.rightContent
   );
-  attachDblClickHandler(fileDiffContent);
 
   resultTitle.textContent = `${leftPath}  ↔  ${rightPath}`;
-
-  const rows = buildRows(result.leftContent, result.rightContent);
   const added   = rows.filter(r => r.type === 'added'   || r.type === 'change').length;
   const removed = rows.filter(r => r.type === 'removed' || r.type === 'change').length;
   resultSummary.textContent = `+${added} / -${removed}`;
@@ -404,27 +450,43 @@ async function runFileCompare(leftPath, rightPath) {
 let dirEntries = [];
 
 async function runDirCompare(leftDir, rightDir) {
-  const result = await window.api.compareDirs(leftDir, rightDir);
-  if (!result.ok) throw new Error(result.error);
-
-  dirEntries = result.entries;
-
+  dirEntries = [];
   const counts = { same: 0, modified: 0, added: 0, removed: 0 };
-  for (const e of dirEntries) counts[e.status]++;
 
   resultTitle.textContent = `${leftDir}  ↔  ${rightDir}`;
-  resultSummary.textContent =
-    `変更: ${counts.modified}  追加: ${counts.added}  削除: ${counts.removed}  同一: ${counts.same}`;
-
-  renderDirTree(dirEntries);
+  resultSummary.textContent = '比較中…';
+  renderDirTree([]);
   fileView.classList.add('hidden');
   dirView.classList.remove('hidden');
   dirDiffPanel.classList.add('hidden');
+  showResultScreen();
+
+  window.api.offDirEvents();
+
+  return new Promise((resolve, reject) => {
+    window.api.onDirEntry((entry) => {
+      dirEntries.push(entry);
+      counts[entry.status]++;
+      appendDirEntry(entry);
+    });
+
+    window.api.onDirCompareDone(() => {
+      window.api.offDirEvents();
+      resultSummary.textContent =
+        `変更: ${counts.modified}  追加: ${counts.added}  削除: ${counts.removed}  同一: ${counts.same}`;
+      resolve();
+    });
+
+    window.api.compareDirs(leftDir, rightDir).then(result => {
+      if (!result.ok) {
+        window.api.offDirEvents();
+        reject(new Error(result.error));
+      }
+    });
+  });
 }
 
 function renderDirTree(entries) {
-  const statusLabel = { same: '同一', modified: '変更', added: '追加', removed: '削除' };
-
   dirTree.innerHTML = `
     <div class="tree-legend">
       <span class="legend-item"><span class="legend-dot" style="background:#fab387"></span>変更</span>
@@ -433,24 +495,23 @@ function renderDirTree(entries) {
       <span class="legend-item"><span class="legend-dot" style="background:#45475a"></span>同一</span>
     </div>
   `;
+  for (const entry of entries) appendDirEntry(entry);
+}
 
-  for (const entry of entries) {
-    const item = document.createElement('div');
-    item.className = `tree-item status-${entry.status}`;
-    item.dataset.relPath = entry.relPath;
-
-    item.innerHTML = `
-      <span class="tree-status"></span>
-      <span class="tree-name" title="${entry.relPath}">${entry.relPath}</span>
-      <span class="tree-badge">${statusLabel[entry.status]}</span>
-    `;
-
-    if (entry.status !== 'same') {
-      item.addEventListener('click', () => openDirFileDiff(entry, item));
-    }
-
-    dirTree.appendChild(item);
+function appendDirEntry(entry) {
+  const statusLabel = { same: '同一', modified: '変更', added: '追加', removed: '削除' };
+  const item = document.createElement('div');
+  item.className = `tree-item status-${entry.status}`;
+  item.dataset.relPath = entry.relPath;
+  item.innerHTML = `
+    <span class="tree-status"></span>
+    <span class="tree-name" title="${entry.relPath}">${entry.relPath}</span>
+    <span class="tree-badge">${statusLabel[entry.status]}</span>
+  `;
+  if (entry.status !== 'same') {
+    item.addEventListener('click', () => openDirFileDiff(entry, item));
   }
+  dirTree.appendChild(item);
 }
 
 async function openDirFileDiff(entry, itemEl) {
@@ -471,11 +532,7 @@ async function openDirFileDiff(entry, itemEl) {
   const rightLabel = entry.rightFull || '(存在しない)';
 
   rowDataStore.length = 0;
-  diffPanelContent.innerHTML = renderSideBySideDiff(
-    leftLabel, rightLabel,
-    result.leftContent, result.rightContent
-  );
-  attachDblClickHandler(diffPanelContent);
+  mountSideBySideDiff(diffPanelContent, leftLabel, rightLabel, result.leftContent, result.rightContent);
 }
 
 closeDiffPanel.addEventListener('click', () => {

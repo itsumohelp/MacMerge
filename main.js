@@ -66,38 +66,39 @@ ipcMain.handle('compare-files', async (_event, leftPath, rightPath) => {
   }
 });
 
-ipcMain.handle('compare-dirs', async (_event, leftDir, rightDir) => {
+ipcMain.handle('compare-dirs', async (event, leftDir, rightDir) => {
   try {
     const leftMap = walkDir(leftDir);
     const rightMap = walkDir(rightDir);
 
-    const allKeys = new Set([...leftMap.keys(), ...rightMap.keys()]);
-    const entries = [];
+    const allKeys = [...new Set([...leftMap.keys(), ...rightMap.keys()])].sort();
+    let count = 0;
 
-    for (const relPath of [...allKeys].sort()) {
+    for (const relPath of allKeys) {
       const leftFull = leftMap.get(relPath);
       const rightFull = rightMap.get(relPath);
 
       let status;
       if (!leftFull) {
-        status = 'added'; // exists only in right
+        status = 'added';
       } else if (!rightFull) {
-        status = 'removed'; // exists only in left
+        status = 'removed';
       } else {
         const leftContent = fs.readFileSync(leftFull, 'utf8');
         const rightContent = fs.readFileSync(rightFull, 'utf8');
         status = leftContent === rightContent ? 'same' : 'modified';
       }
 
-      entries.push({
-        relPath,
-        leftFull: leftFull || null,
-        rightFull: rightFull || null,
-        status,
-      });
+      event.sender.send('dir-entry', { relPath, leftFull: leftFull || null, rightFull: rightFull || null, status });
+
+      // Yield every 20 entries to keep UI responsive
+      if (++count % 20 === 0) {
+        await new Promise(resolve => setImmediate(resolve));
+      }
     }
 
-    return { ok: true, entries, leftDir, rightDir };
+    event.sender.send('dir-compare-done', { leftDir, rightDir });
+    return { ok: true };
   } catch (err) {
     return { ok: false, error: err.message };
   }
