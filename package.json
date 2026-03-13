@@ -1,37 +1,19 @@
 {
   "name": "macmerge",
-  "version": "1.0.6",
+  "version": "1.0.0",
   "description": "",
-  "main": "main.js",
   "scripts": {
-    "start": "unset ELECTRON_RUN_AS_NODE && electron .",
-    "build": "electron-builder --mac --universal --publish never"
-  },
-  "build": {
-    "appId": "com.macmerge.app",
-    "productName": "MacMerge",
-    "icon": "assets/icon.icns",
-    "mac": {
-      "category": "public.app-category.developer-tools",
-      "target": [{ "target": "dmg", "arch": "universal" }]
-    },
-    "files": [
-      "main.js",
-      "preload.js",
-      "renderer/**/*",
-      "assets/icon.icns",
-      "node_modules/**/*"
-    ]
+    "tauri": "tauri",
+    "dev": "tauri dev",
+    "build": "tauri build"
   },
   "keywords": [],
   "author": "",
   "license": "MIT",
   "dependencies": {
-    "diff": "^8.0.3",
-    "diff2html": "^3.4.56"
+    "diff": "^8.0.3"
   },
   "devDependencies": {
-    "electron": "^32.3.3",
-    "electron-builder": "^26.8.1"
+    "@tauri-apps/cli": "^2"
   }
 }

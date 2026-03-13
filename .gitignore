@@ -15,3 +15,10 @@ yarn-error.log*
 # Environment
 .env
 .env.local
+
+# Tauri / Rust build artifacts
+src-tauri/target/
+src-tauri/WixTools/
+*.zip
+*.dmg
+*.pkg
