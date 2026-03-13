@@ -22,28 +22,6 @@ jobs:
       - name: Install npm dependencies
         run: npm ci
 
-      - name: Import Apple certificate
-        env:
-          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
-          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
-        run: |
-          KEYCHAIN_PASS="$(openssl rand -hex 16)"
-          echo "$APPLE_CERTIFICATE" | base64 --decode > certificate.p12
-          security create-keychain -p "$KEYCHAIN_PASS" build.keychain
-          security set-keychain-settings -lut 21600 build.keychain
-          security unlock-keychain -p "$KEYCHAIN_PASS" build.keychain
-          security import certificate.p12 \
-            -k build.keychain \
-            -P "$APPLE_CERTIFICATE_PASSWORD" \
-            -T /usr/bin/codesign
-          security list-keychains -d user -s build.keychain
-          security set-key-partition-list \
-            -S apple-tool:,apple: \
-            -s -k "$KEYCHAIN_PASS" build.keychain
-          security find-identity -v -p codesigning build.keychain
-          rm certificate.p12
-          echo "KEYCHAIN_PASS=$KEYCHAIN_PASS" >> $GITHUB_ENV
-
       - name: Write App Store Connect API key
         env:
           APPLE_API_KEY_CONTENT: ${{ secrets.APPLE_API_KEY_CONTENT }}
@@ -54,13 +32,6 @@ jobs:
           echo "$APPLE_API_KEY_CONTENT" | base64 --decode > "$KEY_PATH"
           echo "APPLE_API_KEY_PATH=$KEY_PATH" >> $GITHUB_ENV
 
-      - name: Build and notarize
-        env:
-          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
-          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
-          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
-        run: npm run build
-
       - name: Extract release notes
         run: |
           TAG=${GITHUB_REF#refs/tags/}
@@ -69,8 +40,19 @@ jobs:
           echo "$NOTES" >> $GITHUB_ENV
           echo "EOF" >> $GITHUB_ENV
 
-      - name: Upload DMG to release
-        uses: softprops/action-gh-release@v2
+      - name: Build, sign, notarize and release
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+          APPLE_API_KEY_PATH: ${{ env.APPLE_API_KEY_PATH }}
         with:
-          body: ${{ env.RELEASE_NOTES }}
-          files: src-tauri/target/release/bundle/dmg/*.dmg
+          tagName: ${{ github.ref_name }}
+          releaseName: MacMerge ${{ github.ref_name }}
+          releaseBody: ${{ env.RELEASE_NOTES }}
+          releaseDraft: false
+          prerelease: false
