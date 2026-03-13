@@ -29,6 +29,7 @@ jobs:
         run: |
           echo "$APPLE_CERTIFICATE" | base64 --decode > certificate.p12
           security create-keychain -p "" build.keychain
+          security list-keychains -d user -s build.keychain
           security default-keychain -s build.keychain
           security unlock-keychain -p "" build.keychain
           security import certificate.p12 \
@@ -39,6 +40,7 @@ jobs:
           security set-key-partition-list \
             -S apple-tool:,apple:,codesign: \
             -s -k "" build.keychain
+          security find-identity -v -p codesigning build.keychain
           rm certificate.p12
 
       - name: Write App Store Connect API key
