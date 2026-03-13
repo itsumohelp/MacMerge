@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(ls /Users/kusakari/dev/2026/MacMerge/.env*)",
+      "Bash(grep -v \"^$\")",
+      "Bash(source .env)",
+      "Bash(PATH=\"$HOME/.cargo/bin:$PATH\" node_modules/.bin/tauri build)",
+      "Bash(sudo sntp:*)",
+      "Bash(sntp time.apple.com)",
+      "Read(//Users/kusakari/Desktop/**)",
+      "Bash(security find-certificate:*)"
+    ]
+  }
+}

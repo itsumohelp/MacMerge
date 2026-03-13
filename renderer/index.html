@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8" />
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline';" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline' tauri:;" />
   <title>MacMerge</title>
   <link rel="stylesheet" href="style.css" />
 </head>
@@ -10,7 +10,6 @@
   <div id="app">
     <!-- ======== DROP SCREEN ======== -->
     <div id="drop-screen">
-      <div class="app-title">MacMerge</div>
       <div class="app-subtitle">2つのファイルまたはフォルダをドロップして比較</div>
 
       <div class="drop-row">
@@ -32,7 +31,21 @@
       </div>
 
       <button id="compare-btn" disabled>比較する</button>
+      <button id="text-input-btn">入力する</button>
       <div id="drop-error" class="error-msg"></div>
+    </div>
+
+    <!-- ======== TEXT INPUT SCREEN ======== -->
+    <div id="text-input-screen" class="hidden">
+      <div class="toolbar">
+        <button id="text-back-btn">← 戻る</button>
+        <span class="result-title">テキストを入力して比較</span>
+        <button id="text-compare-btn">比較する (F5)</button>
+      </div>
+      <div class="text-input-area">
+        <textarea id="text-left" placeholder="左 (Before)"></textarea>
+        <textarea id="text-right" placeholder="右 (After)"></textarea>
+      </div>
     </div>
 
     <!-- ======== LINE DETAIL PANEL (fixed bottom) ======== -->
@@ -68,17 +81,43 @@
             <button id="close-diff-panel">✕</button>
           </div>
           <div id="diff-panel-content"></div>
+          <div id="dir-file-info-bar" class="hidden">
+            <div class="file-info-half">
+              <span class="info-side-label">左</span>
+              <span id="dir-info-enc-left"  class="info-enc-badge"></span>
+              <span id="dir-info-le-left"   class="info-le-badge"></span>
+            </div>
+            <div class="file-info-divider"></div>
+            <div class="file-info-half">
+              <span class="info-side-label">右</span>
+              <span id="dir-info-enc-right" class="info-enc-badge"></span>
+              <span id="dir-info-le-right"  class="info-le-badge"></span>
+            </div>
+          </div>
         </div>
       </div>
 
       <!-- File diff view -->
       <div id="file-view" class="hidden">
         <div id="file-diff-content"></div>
+        <div id="file-info-bar" class="hidden">
+          <div class="file-info-half">
+            <span class="info-side-label">左</span>
+            <span id="info-enc-left"  class="info-enc-badge"></span>
+            <span id="info-le-left"   class="info-le-badge"></span>
+          </div>
+          <div class="file-info-divider"></div>
+          <div class="file-info-half">
+            <span class="info-side-label">右</span>
+            <span id="info-enc-right" class="info-enc-badge"></span>
+            <span id="info-le-right"  class="info-le-badge"></span>
+          </div>
+        </div>
       </div>
     </div>
   </div>
 
-  <script src="../node_modules/diff/dist/diff.js"></script>
+  <script src="diff.js"></script>
   <script src="renderer.js"></script>
 </body>
 </html>

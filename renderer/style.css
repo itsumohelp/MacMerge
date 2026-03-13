@@ -96,7 +96,57 @@ button, input, select { -webkit-app-region: no-drag; }
 #compare-btn:disabled { opacity: 0.35; cursor: not-allowed; }
 #compare-btn:not(:disabled):hover { opacity: 0.85; }
 
+#text-input-btn {
+  padding: 10px 36px;
+  font-size: 14px;
+  font-weight: 600;
+  border: 1px solid #45475a;
+  border-radius: 10px;
+  background: transparent;
+  color: #cdd6f4;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+#text-input-btn:hover { background: #313244; }
+
 .error-msg { color: #f38ba8; font-size: 13px; min-height: 18px; }
+
+/* ===== Text Input Screen ===== */
+#text-input-screen { display: flex; flex-direction: column; height: 100%; }
+
+.text-input-area {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+
+#text-left, #text-right {
+  flex: 1;
+  resize: none;
+  padding: 14px;
+  font-family: 'SF Mono', 'Menlo', 'Monaco', monospace;
+  font-size: 13px;
+  line-height: 1.6;
+  background: #1e1e2e;
+  color: #cdd6f4;
+  border: none;
+  outline: none;
+  -webkit-app-region: no-drag;
+}
+#text-left  { border-right: 1px solid #313244; }
+
+#text-compare-btn {
+  padding: 5px 16px;
+  font-size: 13px;
+  font-weight: 600;
+  border: none;
+  border-radius: 6px;
+  background: #cba6f7;
+  color: #1e1e2e;
+  cursor: pointer;
+  -webkit-app-region: no-drag;
+}
+#text-compare-btn:hover { opacity: 0.85; }
 
 /* ===== Result Screen ===== */
 #result-screen { display: flex; flex-direction: column; height: 100%; }
@@ -194,6 +244,10 @@ button, input, select { -webkit-app-region: no-drag; }
 .status-added    .tree-badge { background: rgba(166,227,161,0.15); color: #a6e3a1; }
 .status-removed  .tree-badge { background: rgba(243,139,168,0.15); color: #f38ba8; }
 
+.tree-dir { cursor: pointer; }
+.tree-dir .tree-name { font-weight: 500; }
+.tree-dir-icon { font-size: 9px; flex-shrink: 0; width: 14px; color: #6c7086; }
+
 .tree-legend {
   padding: 8px 16px 4px;
   font-size: 11px;
@@ -244,6 +298,43 @@ button, input, select { -webkit-app-region: no-drag; }
   flex-direction: column;
   min-height: 0;
 }
+
+/* ===== File Info Bar ===== */
+#file-info-bar {
+  display: flex;
+  align-items: center;
+  height: 26px;
+  flex-shrink: 0;
+  background: #181825;
+  border-top: 1px solid #313244;
+  font-family: 'SF Mono', 'Menlo', 'Monaco', monospace;
+  font-size: 11px;
+  margin: 0 -16px -16px;
+}
+.file-info-half {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 12px;
+  overflow: hidden;
+}
+.file-info-divider { width: 1px; height: 14px; background: #45475a; flex-shrink: 0; }
+.info-side-label { color: #45475a; font-weight: 700; font-size: 10px; }
+.info-enc-badge {
+  color: #6c7086;
+  padding: 0 5px;
+  border-radius: 3px;
+  background: #313244;
+}
+.info-enc-badge.info-badge-diff { color: #fab387; background: rgba(250,179,135,0.15); }
+.info-le-badge {
+  padding: 0 5px;
+  border-radius: 3px;
+  background: #313244;
+  font-weight: 700;
+}
+.info-le-badge.info-badge-diff { outline: 1px solid currentColor; }
 
 /* ===== File View ===== */
 #file-view {
@@ -344,7 +435,9 @@ button, input, select { -webkit-app-region: no-drag; }
 .diff-ln-ins  { background: rgba(166,227,161,0.18); color: #a6e3a1; }
 .diff-code-del  { background: rgba(243,139,168,0.18); }
 .diff-code-ins  { background: rgba(166,227,161,0.18); }
-.diff-code-empty { background: #181825; }
+.diff-code-empty  { background: #181825; }  /* 旧クラス（後方互換） */
+.diff-ln-filler   { background: transparent; border-right: 1px solid #313244; }
+.diff-code-filler { background: transparent; }
 
 /* Character-level highlights */
 mark.diff-del {
@@ -457,6 +550,39 @@ mark.diff-ins {
 /* ===== Diff row cursor ===== */
 tr[data-row] { cursor: pointer; }
 tr[data-row]:hover td { filter: brightness(1.15); }
+
+/* Dir file info bar */
+#dir-file-info-bar {
+  display: flex;
+  align-items: center;
+  height: 26px;
+  flex-shrink: 0;
+  background: #181825;
+  border-top: 1px solid #313244;
+  font-family: 'SF Mono', 'Menlo', 'Monaco', monospace;
+  font-size: 11px;
+}
+
+/* Binary view */
+.binary-view {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  gap: 10px;
+  color: #45475a;
+}
+.binary-icon  { font-size: 28px; }
+.binary-label { font-size: 13px; }
+.binary-result {
+  font-size: 15px;
+  font-weight: 700;
+  padding: 5px 20px;
+  border-radius: 8px;
+}
+.binary-same { color: #a6e3a1; background: rgba(166,227,161,0.15); }
+.binary-diff { color: #f38ba8; background: rgba(243,139,168,0.15); }
 
 /* empty state in diff panel */
 .empty-panel {
