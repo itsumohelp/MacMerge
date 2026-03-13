@@ -27,21 +27,22 @@ jobs:
           APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
           APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
         run: |
+          KEYCHAIN_PASS="$(openssl rand -hex 16)"
           echo "$APPLE_CERTIFICATE" | base64 --decode > certificate.p12
-          security create-keychain -p "" build.keychain
-          security list-keychains -d user -s build.keychain
-          security default-keychain -s build.keychain
-          security unlock-keychain -p "" build.keychain
+          security create-keychain -p "$KEYCHAIN_PASS" build.keychain
+          security set-keychain-settings -lut 21600 build.keychain
+          security unlock-keychain -p "$KEYCHAIN_PASS" build.keychain
           security import certificate.p12 \
             -k build.keychain \
             -P "$APPLE_CERTIFICATE_PASSWORD" \
-            -T /usr/bin/codesign \
-            -T /usr/bin/security
+            -T /usr/bin/codesign
+          security list-keychains -d user -s build.keychain
           security set-key-partition-list \
-            -S apple-tool:,apple:,codesign: \
-            -s -k "" build.keychain
+            -S apple-tool:,apple: \
+            -s -k "$KEYCHAIN_PASS" build.keychain
           security find-identity -v -p codesigning build.keychain
           rm certificate.p12
+          echo "KEYCHAIN_PASS=$KEYCHAIN_PASS" >> $GITHUB_ENV
 
       - name: Write App Store Connect API key
         env:
