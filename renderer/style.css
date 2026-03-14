@@ -488,9 +488,21 @@ mark.diff-ins {
 .ldp-header {
   display: flex;
   align-items: center;
+  gap: 12px;
   padding: 4px 12px;
   border-bottom: 1px solid #313244;
   min-height: 26px;
+}
+#ldp-info-bar {
+  display: flex;
+  align-items: center;
+  height: 18px;
+  font-family: 'SF Mono', 'Menlo', 'Monaco', monospace;
+  font-size: 10px;
+  background: #1e1e2e;
+  border: 1px solid #313244;
+  border-radius: 4px;
+  overflow: hidden;
 }
 .ldp-title {
   flex: 1;
@@ -550,6 +562,19 @@ mark.diff-ins {
 /* ===== Diff row cursor ===== */
 tr[data-row] { cursor: pointer; }
 tr[data-row]:hover td { filter: brightness(1.15); }
+
+/* ===== Line ending icons ===== */
+.le-icon {
+  font-size: 9px;
+  opacity: 0.55;
+  user-select: none;
+  margin-left: 2px;
+  vertical-align: middle;
+  font-style: normal;
+}
+.le-lf   { color: #a6e3a1; }
+.le-crlf { color: #fab387; }
+.le-cr   { color: #f38ba8; }
 
 /* Dir file info bar */
 #dir-file-info-bar {

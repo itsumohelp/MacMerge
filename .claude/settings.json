@@ -8,7 +8,12 @@
       "Bash(sudo sntp:*)",
       "Bash(sntp time.apple.com)",
       "Read(//Users/kusakari/Desktop/**)",
-      "Bash(security find-certificate:*)"
+      "Bash(security find-certificate:*)",
+      "Bash(PATH=\"$HOME/.cargo/bin:$PATH\" npx tauri build)",
+      "Bash(PATH=\"$HOME/.cargo/bin:/usr/local/bin:/opt/homebrew/bin:$PATH\" npx tauri build)",
+      "Bash(PATH=\"$HOME/.cargo/bin:/usr/local/bin:/opt/homebrew/bin:$PATH\" ~/.cargo/bin/cargo build)",
+      "Bash(PATH=\"$HOME/.cargo/bin:/usr/local/bin:/opt/homebrew/bin:$PATH\" ~/.cargo/bin/cargo build --manifest-path src-tauri/Cargo.toml)",
+      "Bash(PATH=\"$HOME/.cargo/bin:/usr/local/bin:/opt/homebrew/bin:$PATH\" ~/.cargo/bin/cargo check --manifest-path /Users/kusakari/dev/2026/MacMerge/src-tauri/Cargo.toml)"
     ]
   }
 }

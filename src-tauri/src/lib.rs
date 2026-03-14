@@ -26,6 +26,17 @@ fn get_mtime(path: &str) -> Option<u64> {
         .map(|d| d.as_millis() as u64)
 }
 
+// ---- Window args (for passing paths to new windows) ----
+
+#[derive(Serialize, Clone)]
+struct WindowArgsData {
+    left: Option<String>,
+    right: Option<String>,
+}
+
+#[derive(Default)]
+struct WindowArgs(Mutex<HashMap<String, WindowArgsData>>);
+
 // ---- Commands ----
 
 fn is_binary(bytes: &[u8]) -> bool {
@@ -187,18 +198,55 @@ fn get_path_type(path: String) -> &'static str {
     if Path::new(&path).is_dir() { "dir" } else { "file" }
 }
 
+#[tauri::command]
+fn open_window(
+    app: AppHandle,
+    left: Option<String>,
+    right: Option<String>,
+) -> Result<(), String> {
+    use tauri::WebviewWindowBuilder;
+    let label = format!("w{}", std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis());
+
+    if left.is_some() || right.is_some() {
+        let state = app.state::<WindowArgs>();
+        state.0.lock().unwrap().insert(label.clone(), WindowArgsData { left, right });
+    }
+
+    WebviewWindowBuilder::new(&app, &label, tauri::WebviewUrl::App("index.html".into()))
+        .title("MacMerge")
+        .inner_size(1200.0, 800.0)
+        .min_inner_size(700.0, 400.0)
+        .build()
+        .map_err(|e| e.to_string())?;
+
+    Ok(())
+}
+
+#[tauri::command]
+fn get_window_args(app: AppHandle, label: String) -> Option<WindowArgsData> {
+    let state = app.state::<WindowArgs>();
+    let mut guard = state.0.lock().unwrap();
+    guard.remove(&label)
+}
+
 // ---- App entry ----
 
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .manage(Mutex::new(WatchState::default()))
+        .manage(WindowArgs::default())
         .invoke_handler(tauri::generate_handler![
             compare_files,
             compare_dirs,
             read_file_pair,
             watch_files,
             get_path_type,
+            open_window,
+            get_window_args,
         ])
         .setup(|app| {
             let app_handle = app.handle().clone();
@@ -214,7 +262,6 @@ pub fn run() {
                         let app   = app_handle.clone();
                         let guard = dialog_showing.clone();
                         tauri::async_runtime::spawn(async move {
-                            // Skip if a dialog is already up
                             {
                                 let mut showing = guard.lock().unwrap();
                                 if *showing { return; }
@@ -226,7 +273,6 @@ pub fn run() {
                                 let mut ws = ws.lock().unwrap();
 
                                 let mut changed_names = Vec::new();
-                                // Check left and right separately to satisfy borrow checker
                                 if let Some(ref mut side) = ws.left {
                                     if let Some(mtime) = get_mtime(&side.path) {
                                         if mtime != side.mtime {
@@ -259,7 +305,6 @@ pub fn run() {
                                 return;
                             }
 
-                            // Let the frontend handle the dialog and reload decision
                             let _ = app.emit("files-changed", changed);
                             *guard.lock().unwrap() = false;
                         });
