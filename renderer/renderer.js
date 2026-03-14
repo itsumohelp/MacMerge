@@ -3,6 +3,14 @@
 // ---- Tauri API references (set after DOMContentLoaded) ----
 let _invoke, _listen, _ask, _webviewWindow;
 
+// ---- Line ending icon ----
+function leIcon(ending) {
+  if (!ending) return '';
+  if (ending === 'CRLF') return '<span class="le-icon le-crlf">⏎</span>';
+  if (ending === 'CR')   return '<span class="le-icon le-cr">↩</span>';
+  return '<span class="le-icon le-lf">↵</span>';
+}
+
 // ---- Virtual Scroller ----
 const ROW_HEIGHT    = 22;   // px per row (fixed height)
 const SCROLL_BUFFER = 30;   // extra rows rendered above/below viewport
@@ -12,18 +20,15 @@ class VirtualScroller {
     this.rows      = rows;
     this.container = container;
 
-    // hSplit: flex row – its min-height drives the container's scroll height
     this.hSplit          = document.createElement('div');
     this.hSplit.className = 'diff-h-split';
     this.hSplit.style.minHeight = `${rows.length * ROW_HEIGHT}px`;
 
-    // Left / right halves – each scrolls independently on the X axis
     this.leftWrap           = document.createElement('div');
     this.rightWrap          = document.createElement('div');
     this.leftWrap.className  = 'diff-left-wrap';
     this.rightWrap.className = 'diff-right-wrap';
 
-    // One table per side, absolutely positioned within its half
     this.tableL = document.createElement('table');
     this.tableR = document.createElement('table');
     this.tableL.className = this.tableR.className = 'diff-table';
@@ -77,22 +82,22 @@ class VirtualScroller {
 
     if (row.type === 'same') {
       trL.className = trR.className = 'diff-row-same';
-      trL.innerHTML = `<td class="diff-ln">${row.leftNum}</td><td class="diff-code">${row.leftHtml}</td>`;
-      trR.innerHTML = `<td class="diff-ln">${row.rightNum}</td><td class="diff-code">${row.rightHtml}</td>`;
+      trL.innerHTML = `<td class="diff-ln">${row.leftNum}</td><td class="diff-code">${row.leftHtml}${leIcon(row.leftEnding)}</td>`;
+      trR.innerHTML = `<td class="diff-ln">${row.rightNum}</td><td class="diff-code">${row.rightHtml}${leIcon(row.rightEnding)}</td>`;
     } else if (row.type === 'change') {
       trL.className = trR.className = 'diff-row-change';
       trL.dataset.row = trR.dataset.row = row.rowIdx;
       trL.title = trR.title = 'ダブルクリックで詳細表示';
-      trL.innerHTML = `<td class="diff-ln diff-ln-del">${row.leftNum}</td><td class="diff-code diff-code-del">${row.leftHtml}</td>`;
-      trR.innerHTML = `<td class="diff-ln diff-ln-ins">${row.rightNum}</td><td class="diff-code diff-code-ins">${row.rightHtml}</td>`;
+      trL.innerHTML = `<td class="diff-ln diff-ln-del">${row.leftNum}</td><td class="diff-code diff-code-del">${row.leftHtml}${leIcon(row.leftEnding)}</td>`;
+      trR.innerHTML = `<td class="diff-ln diff-ln-ins">${row.rightNum}</td><td class="diff-code diff-code-ins">${row.rightHtml}${leIcon(row.rightEnding)}</td>`;
     } else if (row.type === 'removed') {
       trL.className = trR.className = 'diff-row-change';
-      trL.innerHTML = `<td class="diff-ln diff-ln-del">${row.leftNum}</td><td class="diff-code diff-code-del">${row.leftHtml}</td>`;
+      trL.innerHTML = `<td class="diff-ln diff-ln-del">${row.leftNum}</td><td class="diff-code diff-code-del">${row.leftHtml}${leIcon(row.leftEnding)}</td>`;
       trR.innerHTML = `<td class="diff-ln diff-ln-filler"></td><td class="diff-code diff-code-filler"></td>`;
     } else { // added
       trL.className = trR.className = 'diff-row-change';
       trL.innerHTML = `<td class="diff-ln diff-ln-filler"></td><td class="diff-code diff-code-filler"></td>`;
-      trR.innerHTML = `<td class="diff-ln diff-ln-ins">${row.rightNum}</td><td class="diff-code diff-code-ins">${row.rightHtml}</td>`;
+      trR.innerHTML = `<td class="diff-ln diff-ln-ins">${row.rightNum}</td><td class="diff-code diff-code-ins">${row.rightHtml}${leIcon(row.rightEnding)}</td>`;
     }
     return [trL, trR];
   }
@@ -134,11 +139,15 @@ const fileView        = document.getElementById('file-view');
 const fileDiffContent = document.getElementById('file-diff-content');
 const fileInfoBar     = document.getElementById('file-info-bar');
 
-const lineDetail = document.getElementById('line-detail');
-const ldpBefore  = document.getElementById('ldp-before');
-const ldpAfter   = document.getElementById('ldp-after');
-const closeLdp   = document.getElementById('close-ldp');
+const lineDetail  = document.getElementById('line-detail');
+const ldpBefore   = document.getElementById('ldp-before');
+const ldpAfter    = document.getElementById('ldp-after');
+const closeLdp    = document.getElementById('close-ldp');
+const ldpInfoBar  = document.getElementById('ldp-info-bar');
 const rowDataStore = [];
+
+// ---- Current comparison enc/LE (for LDP) ----
+let _cmpEncL = '', _cmpEncR = '', _cmpLeL = '', _cmpLeR = '';
 
 // ---- Line detail panel ----
 
@@ -172,6 +181,28 @@ function showLineDetail(leftText, rightText) {
   }
   ldpBefore.innerHTML = beforeHtml;
   ldpAfter.innerHTML  = afterHtml;
+
+  // Show enc/LE info bar if available
+  if (_cmpEncL || _cmpEncR) {
+    const encDiff = _cmpEncL !== _cmpEncR;
+    const leDiff  = _cmpLeL  !== _cmpLeR;
+    document.getElementById('ldp-enc-left').textContent  = _cmpEncL;
+    document.getElementById('ldp-enc-right').textContent = _cmpEncR;
+    document.getElementById('ldp-enc-left').className  = 'info-enc-badge' + (encDiff ? ' info-badge-diff' : '');
+    document.getElementById('ldp-enc-right').className = 'info-enc-badge' + (encDiff ? ' info-badge-diff' : '');
+    const elLeL = document.getElementById('ldp-le-left');
+    const elLeR = document.getElementById('ldp-le-right');
+    elLeL.textContent = _cmpLeL;
+    elLeR.textContent = _cmpLeR;
+    elLeL.style.color = LE_COLOR[_cmpLeL] || '#6c7086';
+    elLeR.style.color = LE_COLOR[_cmpLeR] || '#6c7086';
+    elLeL.className = 'info-le-badge' + (leDiff ? ' info-badge-diff' : '');
+    elLeR.className = 'info-le-badge' + (leDiff ? ' info-badge-diff' : '');
+    ldpInfoBar.classList.remove('hidden');
+  } else {
+    ldpInfoBar.classList.add('hidden');
+  }
+
   lineDetail.classList.remove('hidden');
 }
 
@@ -194,10 +225,27 @@ function escHtml(str) {
     .replace(/>/g, '&gt;');
 }
 
-function splitLines(str) {
-  const lines = str.split('\n');
-  if (lines.length > 0 && lines[lines.length - 1] === '') lines.pop();
-  return lines;
+function splitLinesWithEndings(str) {
+  const result = [];
+  let i = 0, lineStart = 0;
+  while (i < str.length) {
+    if (str[i] === '\r' && i + 1 < str.length && str[i + 1] === '\n') {
+      result.push({ text: str.slice(lineStart, i), ending: 'CRLF' });
+      i += 2; lineStart = i;
+    } else if (str[i] === '\r') {
+      result.push({ text: str.slice(lineStart, i), ending: 'CR' });
+      i++; lineStart = i;
+    } else if (str[i] === '\n') {
+      result.push({ text: str.slice(lineStart, i), ending: 'LF' });
+      i++; lineStart = i;
+    } else {
+      i++;
+    }
+  }
+  if (lineStart < str.length) {
+    result.push({ text: str.slice(lineStart), ending: null });
+  }
+  return result;
 }
 
 function buildRows(leftContent, rightContent) {
@@ -210,22 +258,23 @@ function buildRows(leftContent, rightContent) {
     const part = lineDiff[i];
 
     if (!part.added && !part.removed) {
-      for (const line of splitLines(part.value)) {
+      for (const { text, ending } of splitLinesWithEndings(part.value)) {
         rows.push({ type: 'same', leftNum: leftNum++, rightNum: rightNum++,
-                    leftHtml: escHtml(line), rightHtml: escHtml(line) });
+                    leftHtml: escHtml(text), rightHtml: escHtml(text),
+                    leftEnding: ending, rightEnding: ending });
       }
       i++;
       continue;
     }
 
-    const leftLines  = part.removed ? splitLines(part.value) : [];
+    const leftLines  = part.removed ? splitLinesWithEndings(part.value) : [];
     let   rightLines = [];
 
     if (part.removed && i + 1 < lineDiff.length && lineDiff[i + 1].added) {
-      rightLines = splitLines(lineDiff[i + 1].value);
+      rightLines = splitLinesWithEndings(lineDiff[i + 1].value);
       i += 2;
     } else if (part.added) {
-      rightLines = splitLines(part.value);
+      rightLines = splitLinesWithEndings(part.value);
       i++;
     } else {
       i++;
@@ -235,19 +284,22 @@ function buildRows(leftContent, rightContent) {
 
     for (let j = 0; j < pairCount; j++) {
       const rowIdx = rowDataStore.length;
-      rowDataStore.push({ leftText: leftLines[j], rightText: rightLines[j] });
+      rowDataStore.push({ leftText: leftLines[j].text, rightText: rightLines[j].text });
       rows.push({ type: 'change', leftNum: leftNum++, rightNum: rightNum++,
-                  leftHtml: escHtml(leftLines[j]), rightHtml: escHtml(rightLines[j]), rowIdx });
+                  leftHtml: escHtml(leftLines[j].text), rightHtml: escHtml(rightLines[j].text),
+                  leftEnding: leftLines[j].ending, rightEnding: rightLines[j].ending, rowIdx });
     }
 
     for (let j = pairCount; j < leftLines.length; j++) {
       rows.push({ type: 'removed', leftNum: leftNum++, rightNum: null,
-                  leftHtml: escHtml(leftLines[j]), rightHtml: '' });
+                  leftHtml: escHtml(leftLines[j].text), rightHtml: '',
+                  leftEnding: leftLines[j].ending, rightEnding: null });
     }
 
     for (let j = pairCount; j < rightLines.length; j++) {
       rows.push({ type: 'added', leftNum: null, rightNum: rightNum++,
-                  leftHtml: '', rightHtml: escHtml(rightLines[j]) });
+                  leftHtml: '', rightHtml: escHtml(rightLines[j].text),
+                  leftEnding: null, rightEnding: rightLines[j].ending });
     }
   }
 
@@ -323,6 +375,10 @@ function detectLineEnding(content) {
 const LE_COLOR = { LF: '#a6e3a1', CRLF: '#fab387', CR: '#f38ba8', Mixed: '#f9e2af', None: '#6c7086' };
 
 function updateFileInfoBar(leftEnc, rightEnc, leftLE, rightLE) {
+  // Store for LDP
+  _cmpEncL = leftEnc; _cmpEncR = rightEnc;
+  _cmpLeL  = leftLE;  _cmpLeR  = rightLE;
+
   const encDiff = leftEnc !== rightEnc;
   const leDiff  = leftLE  !== rightLE;
 
@@ -385,6 +441,7 @@ async function runFileCompare(leftPath, rightPath, restoreScroll = null) {
 
   if (result.isBinary) {
     rowDataStore.length = 0;
+    _cmpEncL = _cmpEncR = _cmpLeL = _cmpLeR = '';
     mountBinaryView(fileDiffContent, leftPath, rightPath, result.isSame);
     resultTitle.textContent   = `${leftPath}  ↔  ${rightPath}`;
     resultSummary.textContent = result.isSame ? '一致' : '不一致';
@@ -403,7 +460,6 @@ async function runFileCompare(leftPath, rightPath, restoreScroll = null) {
   const leftLE  = detectLineEnding(leftContent);
   const rightLE = detectLineEnding(rightContent);
 
-  // 文字コードが異なる場合はダイアログ（リロード時はスキップ）
   if (leftEnc !== rightEnc && !restoreScroll) {
     const msg = `文字コードが異なります\n左: ${leftEnc}　右: ${rightEnc}\n\n文字コードを差分として扱いますか？`;
     const treatAsDiff = _ask
@@ -602,6 +658,7 @@ async function openDirFileDiff(entry, itemEl) {
     rowDataStore.length = 0;
 
     if (result.isBinary) {
+      _cmpEncL = _cmpEncR = _cmpLeL = _cmpLeR = '';
       mountBinaryView(diffPanelContent, leftLabel, rightLabel, result.isSame);
     } else {
       mountSideBySideDiff(diffPanelContent, leftLabel, rightLabel, result.leftContent, result.rightContent);
@@ -610,6 +667,10 @@ async function openDirFileDiff(entry, itemEl) {
       const rightEnc = detectEncoding(result.rightContent);
       const leftLE   = detectLineEnding(result.leftContent);
       const rightLE  = detectLineEnding(result.rightContent);
+
+      // Store for LDP
+      _cmpEncL = leftEnc; _cmpEncR = rightEnc;
+      _cmpLeL  = leftLE;  _cmpLeR  = rightLE;
 
       const encDiff = leftEnc !== rightEnc;
       const leDiff  = leftLE  !== rightLE;
@@ -684,6 +745,7 @@ textBackBtn.addEventListener('click', () => {
 
 function runTextCompare() {
   rowDataStore.length = 0;
+  _cmpEncL = _cmpEncR = _cmpLeL = _cmpLeR = '';
   const { rows } = mountSideBySideDiff(
     fileDiffContent,
     '左 (Before)', '右 (After)',
@@ -756,9 +818,12 @@ function updateCompareBtn() {
   compareBtn.disabled   = false;
 }
 
+function isOnDropScreen() {
+  return !dropScreen.classList.contains('hidden');
+}
+
 // ---- Drag & Drop via Tauri ----
 
-// Prevent default on DOM dragover so the OS shows a "copy" cursor while dragging
 document.addEventListener('dragover', (e) => e.preventDefault(), false);
 document.addEventListener('drop',     (e) => e.preventDefault(), false);
 
@@ -769,7 +834,6 @@ async function setupTauriDragDrop(webviewWindow) {
     if (type === 'enter' || type === 'over') {
       const pos = event.payload.position;
       if (pos) {
-        // Convert physical pixels → logical pixels (device pixel ratio)
         const dpr = window.devicePixelRatio || 1;
         const lx = pos.x / dpr;
         const ly = pos.y / dpr;
@@ -805,6 +869,16 @@ async function setupTauriDragDrop(webviewWindow) {
 
     const paths = event.payload.paths;
     if (!paths || paths.length === 0) return;
+
+    // Drop outside drop-screen → open new window
+    if (!isOnDropScreen()) {
+      if (paths.length >= 2) {
+        _invoke('open_window', { left: paths[0], right: paths[1] }).catch(() => {});
+      } else {
+        _invoke('open_window', { left: paths[0], right: null }).catch(() => {});
+      }
+      return;
+    }
 
     if (paths.length >= 2) {
       try {
@@ -855,7 +929,7 @@ async function setupFilesChangedListener() {
     if (filesChangedDialogShowing) return;
     filesChangedDialogShowing = true;
     try {
-      const names   = event.payload; // string[]
+      const names   = event.payload;
       const detail  = names.join('\n') + '\n\n再度読み込みますか？';
       const confirmed = _ask
         ? await _ask(detail, { title: 'ファイルが更新されました', okLabel: '再読み込み', cancelLabel: 'キャンセル' })
@@ -886,6 +960,29 @@ window.addEventListener('DOMContentLoaded', async () => {
 
     await setupTauriDragDrop(_webviewWindow);
     await setupFilesChangedListener();
+
+    // Check if this window was opened with pre-set paths
+    const windowLabel = _webviewWindow.label;
+    if (windowLabel !== 'main') {
+      try {
+        const args = await _invoke('get_window_args', { label: windowLabel });
+        if (args) {
+          const leftPath  = args.left;
+          const rightPath = args.right;
+          if (leftPath) {
+            const t = await _invoke('get_path_type', { path: leftPath });
+            setSlot('left', { path: leftPath, type: t });
+          }
+          if (rightPath) {
+            const t = await _invoke('get_path_type', { path: rightPath });
+            setSlot('right', { path: rightPath, type: t });
+          }
+          if (leftPath && rightPath) {
+            doCompare();
+          }
+        }
+      } catch (_) { /* no args */ }
+    }
   } catch (err) {
     console.error('MacMerge init error:', err);
     document.querySelector('.app-subtitle').textContent = '初期化エラー: ' + err.message;

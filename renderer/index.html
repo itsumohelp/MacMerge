@@ -52,6 +52,19 @@
     <div id="line-detail" class="hidden">
       <div class="ldp-header">
         <span class="ldp-title">差分詳細　<span class="ldp-hint">ダブルクリックで表示</span></span>
+        <div id="ldp-info-bar" class="hidden">
+          <div class="file-info-half">
+            <span class="info-side-label">左</span>
+            <span id="ldp-enc-left"  class="info-enc-badge"></span>
+            <span id="ldp-le-left"   class="info-le-badge"></span>
+          </div>
+          <div class="file-info-divider"></div>
+          <div class="file-info-half">
+            <span class="info-side-label">右</span>
+            <span id="ldp-enc-right" class="info-enc-badge"></span>
+            <span id="ldp-le-right"  class="info-le-badge"></span>
+          </div>
+        </div>
         <button id="close-ldp">✕</button>
       </div>
       <div class="ldp-row">
