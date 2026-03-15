@@ -165,6 +165,7 @@ body.light-mode .status-same .tree-name { color: #64748b; }
 body.light-mode .status-same .tree-badge { color: #64748b; }
 
 body.light-mode .diff-ln { color: #64748b; }
+body.light-mode .diff-ln-filler { background: #eef2ff; }
 body.light-mode .diff-file-sep,
 body.light-mode .tree-legend { color: #94a3b8; }
 body.light-mode #line-detail { border-top-color: #818cf8; }
@@ -593,7 +594,7 @@ body.light-mode #close-ldp:hover { color: #1f2937; }
 .diff-code-del  { background: rgba(243,139,168,0.18); }
 .diff-code-ins  { background: rgba(166,227,161,0.18); }
 .diff-code-empty  { background: #181825; }  /* 旧クラス（後方互換） */
-.diff-ln-filler   { background: transparent; border-right: 1px solid #313244; }
+.diff-ln-filler   { background: #181825; border-right: 1px solid #313244; }
 .diff-code-filler { background: transparent; }
 
 /* Character-level highlights */
