@@ -188,19 +188,99 @@ function syncScroll(source, target) {
 syncScroll(ldpBefore, ldpAfter);
 syncScroll(ldpAfter,  ldpBefore);
 
-function showLineDetail(leftText, rightText) {
-  const charDiff = Diff.diffChars(leftText, rightText);
-  let beforeHtml = '', afterHtml = '';
-  for (const c of charDiff) {
-    if (c.removed) {
-      beforeHtml += `<mark class="diff-del">${escHtml(c.value)}</mark>`;
-    } else if (c.added) {
-      afterHtml  += `<mark class="diff-ins">${escHtml(c.value)}</mark>`;
-    } else {
-      const esc = escHtml(c.value);
-      beforeHtml += esc;
-      afterHtml  += esc;
+function showLineDetail(leftText, rightText, forceWholeDiff = false) {
+  const buildCharDiffHtml = (left, right) => {
+    const charDiff = Diff.diffChars(left, right);
+    let leftHtml = '';
+    let rightHtml = '';
+    for (const c of charDiff) {
+      if (c.removed) {
+        leftHtml += `<mark class="diff-del">${escHtml(c.value)}</mark>`;
+      } else if (c.added) {
+        rightHtml += `<mark class="diff-ins">${escHtml(c.value)}</mark>`;
+      } else {
+        const esc = escHtml(c.value);
+        leftHtml += esc;
+        rightHtml += esc;
+      }
     }
+    return { leftHtml, rightHtml };
+  };
+
+  const splitJsonKeyValueLine = (line) => {
+    const m = line.match(/^(\s*"(?:[^"\\]|\\.)*"\s*:\s*)(.*?)(\s*,\s*)?$/);
+    if (!m) return null;
+    return { prefix: m[1], value: m[2], suffix: m[3] || '' };
+  };
+
+  const splitQuotedValueLine = (line) => {
+    const idxDouble = line.indexOf('"');
+    const idxSingle = line.indexOf("'");
+    let first = -1;
+    if (idxDouble >= 0 && idxSingle >= 0) first = Math.min(idxDouble, idxSingle);
+    else first = Math.max(idxDouble, idxSingle);
+    if (first < 0) return null;
+    const quote = line[first];
+    const last = line.lastIndexOf(quote);
+    if (last <= first) return null;
+    return {
+      prefix: line.slice(0, first + 1),
+      value: line.slice(first + 1, last),
+      suffix: line.slice(last)
+    };
+  };
+
+  const splitBySeparator = (line, sepRegex) => {
+    const m = line.match(sepRegex);
+    if (!m) return null;
+    return { prefix: m[1], value: m[2], suffix: m[3] || '' };
+  };
+
+  const parseStructuredLine = (line) => {
+    return (
+      // JSON: "key": value,
+      splitJsonKeyValueLine(line) ||
+      // quoted command-like: echo "value", message='value'
+      splitQuotedValueLine(line) ||
+      // key=value / --flag=value / export KEY=value
+      splitBySeparator(line, /^(\s*(?:export\s+)?[A-Za-z_][\w.-]*\s*=\s*|(?:--?[A-Za-z][\w-]*)\s*=\s*)(.*?)(\s*[;,]?\s*)?$/) ||
+      // key: value / Header: value
+      splitBySeparator(line, /^(\s*[A-Za-z_][\w .-]*\s*:\s*)(.*?)(\s*[;,]?\s*)?$/)
+    );
+  };
+
+  let beforeHtml = '', afterHtml = '';
+  if (forceWholeDiff) {
+    const leftStructured = parseStructuredLine(leftText);
+    const rightStructured = parseStructuredLine(rightText);
+    let structured = null;
+
+    if (leftStructured && rightStructured) {
+      structured = { left: leftStructured, right: rightStructured };
+    }
+
+    if (
+      structured &&
+      structured.left.prefix === structured.right.prefix &&
+      structured.left.suffix === structured.right.suffix
+    ) {
+      const valueDiff = buildCharDiffHtml(structured.left.value, structured.right.value);
+      beforeHtml =
+        escHtml(structured.left.prefix) +
+        valueDiff.leftHtml +
+        escHtml(structured.left.suffix);
+      afterHtml =
+        escHtml(structured.right.prefix) +
+        valueDiff.rightHtml +
+        escHtml(structured.right.suffix);
+    } else {
+      beforeHtml = leftText ? `<mark class="diff-del">${escHtml(leftText)}</mark>` : '';
+      afterHtml  = rightText ? `<mark class="diff-ins">${escHtml(rightText)}</mark>` : '';
+    }
+  } else {
+    const fullDiff = buildCharDiffHtml(leftText, rightText);
+    beforeHtml = fullDiff.leftHtml;
+    afterHtml = fullDiff.rightHtml;
   }
   ldpBefore.innerHTML = beforeHtml;
   ldpAfter.innerHTML  = afterHtml;
@@ -229,13 +309,115 @@ function showLineDetail(leftText, rightText) {
   lineDetail.classList.remove('hidden');
 }
 
+function buildAlignedLinePair(leftText, rightText) {
+  const commonPrefixLen = (() => {
+    const max = Math.min(leftText.length, rightText.length);
+    let i = 0;
+    while (i < max && leftText[i] === rightText[i]) i++;
+    return i;
+  })();
+  const commonSuffixLen = (() => {
+    const max = Math.min(leftText.length, rightText.length) - commonPrefixLen;
+    let i = 0;
+    while (
+      i < max &&
+      leftText[leftText.length - 1 - i] === rightText[rightText.length - 1 - i]
+    ) i++;
+    return i;
+  })();
+  const coreLeft = leftText.slice(commonPrefixLen, leftText.length - commonSuffixLen);
+  const coreRight = rightText.slice(commonPrefixLen, rightText.length - commonSuffixLen);
+
+  const decisionDiff = Diff.diffChars(coreLeft, coreRight);
+  const unchangedLen = decisionDiff
+    .filter(c => !c.added && !c.removed)
+    .reduce((sum, c) => sum + c.value.length, 0);
+  const baseLen = Math.min(coreLeft.length, coreRight.length);
+  const similarity = baseLen === 0 ? 1 : unchangedLen / baseLen;
+  const hasStableRun = decisionDiff.some(c => !c.added && !c.removed && c.value.length >= 3);
+  const forceWholeDiff =
+    coreLeft.length > 0 &&
+    coreRight.length > 0 &&
+    (similarity < 0.7 || (!hasStableRun && similarity < 0.8));
+
+  if (forceWholeDiff) {
+    return { alignedLeft: leftText, alignedRight: rightText, forceWholeDiff: true };
+  }
+
+  const charDiff = Diff.diffChars(leftText, rightText);
+  let alignedLeft = '';
+  let alignedRight = '';
+
+  for (let i = 0; i < charDiff.length; i++) {
+    const chunk = charDiff[i];
+
+    // Replacement block (removed + added): do not insert blanks for the overlapped part.
+    if (chunk.removed && i + 1 < charDiff.length && charDiff[i + 1].added) {
+      const removed = chunk.value;
+      const added = charDiff[i + 1].value;
+      const sharedLen = Math.min(removed.length, added.length);
+
+      alignedLeft += removed.slice(0, sharedLen);
+      alignedRight += added.slice(0, sharedLen);
+
+      if (removed.length > sharedLen) {
+        const extra = removed.slice(sharedLen);
+        alignedLeft += extra;
+        alignedRight += ' '.repeat(extra.length);
+      } else if (added.length > sharedLen) {
+        const extra = added.slice(sharedLen);
+        alignedLeft += ' '.repeat(extra.length);
+        alignedRight += extra;
+      }
+
+      i++;
+      continue;
+    }
+
+    if (chunk.added && i + 1 < charDiff.length && charDiff[i + 1].removed) {
+      const added = chunk.value;
+      const removed = charDiff[i + 1].value;
+      const sharedLen = Math.min(removed.length, added.length);
+
+      alignedLeft += removed.slice(0, sharedLen);
+      alignedRight += added.slice(0, sharedLen);
+
+      if (removed.length > sharedLen) {
+        const extra = removed.slice(sharedLen);
+        alignedLeft += extra;
+        alignedRight += ' '.repeat(extra.length);
+      } else if (added.length > sharedLen) {
+        const extra = added.slice(sharedLen);
+        alignedLeft += ' '.repeat(extra.length);
+        alignedRight += extra;
+      }
+
+      i++;
+      continue;
+    }
+
+    if (chunk.added) {
+      alignedLeft += ' '.repeat(chunk.value.length);
+      alignedRight += chunk.value;
+    } else if (chunk.removed) {
+      alignedLeft += chunk.value;
+      alignedRight += ' '.repeat(chunk.value.length);
+    } else {
+      alignedLeft += chunk.value;
+      alignedRight += chunk.value;
+    }
+  }
+
+  return { alignedLeft, alignedRight, forceWholeDiff: false };
+}
+
 function attachDblClickHandler(container) {
   container.addEventListener('dblclick', (e) => {
     const tr = e.target.closest('tr[data-row]');
     if (!tr) return;
     const idx  = parseInt(tr.dataset.row, 10);
     const data = rowDataStore[idx];
-    if (data) showLineDetail(data.leftText, data.rightText);
+    if (data) showLineDetail(data.leftText, data.rightText, !!data.forceWholeDiff);
   });
 }
 
@@ -307,7 +489,12 @@ function buildRows(leftContent, rightContent) {
 
     for (let j = 0; j < pairCount; j++) {
       const rowIdx = rowDataStore.length;
-      rowDataStore.push({ leftText: leftLines[j].text, rightText: rightLines[j].text });
+      const aligned = buildAlignedLinePair(leftLines[j].text, rightLines[j].text);
+      rowDataStore.push({
+        leftText: aligned.alignedLeft,
+        rightText: aligned.alignedRight,
+        forceWholeDiff: aligned.forceWholeDiff
+      });
       rows.push({ type: 'change', leftNum: leftNum++, rightNum: rightNum++,
                   leftHtml: escHtml(leftLines[j].text), rightHtml: escHtml(rightLines[j].text),
                   leftEnding: leftLines[j].ending, rightEnding: rightLines[j].ending, rowIdx });
