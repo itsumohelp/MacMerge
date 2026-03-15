@@ -121,6 +121,8 @@ const compareBtn      = document.getElementById('compare-btn');
 const textInputBtn    = document.getElementById('text-input-btn');
 const textBackBtn     = document.getElementById('text-back-btn');
 const textCompareBtn  = document.getElementById('text-compare-btn');
+const themeToggle     = document.getElementById('theme-toggle');
+const themeLabel      = document.getElementById('theme-label');
 const textLeft        = document.getElementById('text-left');
 const textRight       = document.getElementById('text-right');
 const dropError       = document.getElementById('drop-error');
@@ -148,6 +150,27 @@ const rowDataStore = [];
 
 // ---- Current comparison enc/LE (for LDP) ----
 let _cmpEncL = '', _cmpEncR = '', _cmpLeL = '', _cmpLeR = '';
+
+// ---- Theme ----
+const THEME_KEY = 'macmerge-theme';
+
+function applyTheme(theme) {
+  const isLight = theme === 'light';
+  document.body.classList.toggle('light-mode', isLight);
+  themeToggle.checked = isLight;
+  themeLabel.textContent = isLight ? '☀️' : '🌙';
+}
+
+function initTheme() {
+  const savedTheme = localStorage.getItem(THEME_KEY);
+  applyTheme(savedTheme === 'light' ? 'light' : 'dark');
+}
+
+themeToggle.addEventListener('change', () => {
+  const nextTheme = themeToggle.checked ? 'light' : 'dark';
+  applyTheme(nextTheme);
+  localStorage.setItem(THEME_KEY, nextTheme);
+});
 
 // ---- Line detail panel ----
 
@@ -952,6 +975,7 @@ async function setupFilesChangedListener() {
 // ---- Initialise Tauri APIs then boot ----
 window.addEventListener('DOMContentLoaded', async () => {
   try {
+    initTheme();
     const tauri = window.__TAURI__;
     _invoke        = tauri.core.invoke;
     _listen        = tauri.event.listen;
