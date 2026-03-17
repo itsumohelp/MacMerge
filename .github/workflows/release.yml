@@ -20,6 +20,8 @@ jobs:
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin,x86_64-apple-darwin
 
       - name: Install npm dependencies
         run: npm ci
@@ -89,11 +91,11 @@ jobs:
           APPLE_API_KEY_PATH: ${{ env.APPLE_API_KEY_PATH }}
         run: |
           security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
-          npm run build
+          npm run build -- --target universal-apple-darwin
 
       - name: Upload DMG to release
         uses: softprops/action-gh-release@v2
         with:
           draft: true
           body: ${{ env.RELEASE_NOTES }}
-          files: src-tauri/target/release/bundle/dmg/*.dmg
+          files: src-tauri/target/universal-apple-darwin/release/bundle/dmg/*.dmg

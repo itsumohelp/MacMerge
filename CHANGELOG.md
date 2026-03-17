@@ -1,5 +1,10 @@
 # Changelog
 
+## v1.1.9
+
+### ビルド
+- **ユニバーサルバイナリ対応** — Apple Silicon (arm64) と Intel (x86_64) の両アーキテクチャに対応した Universal Binary でビルドするよう GitHub Actions を変更
+
 ## v1.1.8
 
 ### 差分表示の改善
