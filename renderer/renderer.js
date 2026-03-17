@@ -141,6 +141,11 @@ const fileView        = document.getElementById('file-view');
 const fileDiffContent = document.getElementById('file-diff-content');
 const fileInfoBar     = document.getElementById('file-info-bar');
 
+const promptToggleBtn = document.getElementById('prompt-toggle-btn');
+const copyPromptBtn   = document.getElementById('copy-prompt-btn');
+const promptPanel     = document.getElementById('prompt-panel');
+const promptTextarea  = document.getElementById('prompt-textarea');
+
 const lineDetail  = document.getElementById('line-detail');
 const ldpBefore   = document.getElementById('ldp-before');
 const ldpAfter    = document.getElementById('ldp-after');
@@ -150,6 +155,10 @@ const rowDataStore = [];
 
 // ---- Current comparison enc/LE (for LDP) ----
 let _cmpEncL = '', _cmpEncR = '', _cmpLeL = '', _cmpLeR = '';
+
+// ---- Current comparison content (for prompt copy) ----
+let _currentLeftContent  = '';
+let _currentRightContent = '';
 
 // ---- Theme ----
 const THEME_KEY = 'macmerge-theme';
@@ -170,6 +179,40 @@ themeToggle.addEventListener('change', () => {
   const nextTheme = themeToggle.checked ? 'light' : 'dark';
   applyTheme(nextTheme);
   localStorage.setItem(THEME_KEY, nextTheme);
+});
+
+// ---- Prompt panel ----
+const PROMPT_KEY = 'macmerge-prompt';
+
+promptTextarea.value = localStorage.getItem(PROMPT_KEY) || '';
+
+promptToggleBtn.addEventListener('click', () => {
+  const isHidden = promptPanel.classList.toggle('hidden');
+  promptToggleBtn.classList.toggle('active', !isHidden);
+  if (!isHidden) promptTextarea.focus();
+});
+
+promptTextarea.addEventListener('input', () => {
+  localStorage.setItem(PROMPT_KEY, promptTextarea.value);
+});
+
+copyPromptBtn.addEventListener('click', () => {
+  const prompt = promptTextarea.value.trim();
+  const left   = _currentLeftContent;
+  const right  = _currentRightContent;
+
+  let text = '';
+  if (prompt) text += prompt + '\n\n';
+  text += `before: ${left}\nafter: ${right}`;
+
+  navigator.clipboard.writeText(text).then(() => {
+    copyPromptBtn.classList.add('copied');
+    copyPromptBtn.textContent = '✓';
+    setTimeout(() => {
+      copyPromptBtn.classList.remove('copied');
+      copyPromptBtn.textContent = '📋';
+    }, 1200);
+  });
 });
 
 // ---- Line detail panel ----
@@ -652,6 +695,7 @@ async function runFileCompare(leftPath, rightPath, restoreScroll = null) {
   if (result.isBinary) {
     rowDataStore.length = 0;
     _cmpEncL = _cmpEncR = _cmpLeL = _cmpLeR = '';
+    _currentLeftContent = _currentRightContent = '(バイナリファイル)';
     mountBinaryView(fileDiffContent, leftPath, rightPath, result.isSame);
     resultTitle.textContent   = `${leftPath}  ↔  ${rightPath}`;
     resultSummary.textContent = result.isSame ? '一致' : '不一致';
@@ -682,6 +726,8 @@ async function runFileCompare(leftPath, rightPath, restoreScroll = null) {
   }
 
   rowDataStore.length = 0;
+  _currentLeftContent  = leftContent;
+  _currentRightContent = rightContent;
 
   const { rows, tableWrap, vs } = mountSideBySideDiff(
     fileDiffContent,
@@ -869,8 +915,11 @@ async function openDirFileDiff(entry, itemEl) {
 
     if (result.isBinary) {
       _cmpEncL = _cmpEncR = _cmpLeL = _cmpLeR = '';
+      _currentLeftContent = _currentRightContent = '(バイナリファイル)';
       mountBinaryView(diffPanelContent, leftLabel, rightLabel, result.isSame);
     } else {
+      _currentLeftContent  = result.leftContent;
+      _currentRightContent = result.rightContent;
       mountSideBySideDiff(diffPanelContent, leftLabel, rightLabel, result.leftContent, result.rightContent);
 
       const leftEnc  = detectEncoding(result.leftContent);
@@ -945,17 +994,21 @@ let _fromTextInput = false;
 textInputBtn.addEventListener('click', () => {
   dropScreen.classList.add('hidden');
   textInputScreen.classList.remove('hidden');
+  textCompareBtn.classList.remove('hidden');
   textLeft.focus();
 });
 
 textBackBtn.addEventListener('click', () => {
   textInputScreen.classList.add('hidden');
+  textCompareBtn.classList.add('hidden');
   dropScreen.classList.remove('hidden');
 });
 
 function runTextCompare() {
   rowDataStore.length = 0;
   _cmpEncL = _cmpEncR = _cmpLeL = _cmpLeR = '';
+  _currentLeftContent  = textLeft.value;
+  _currentRightContent = textRight.value;
   const { rows } = mountSideBySideDiff(
     fileDiffContent,
     '左 (Before)', '右 (After)',
@@ -969,6 +1022,7 @@ function runTextCompare() {
   dirView.classList.add('hidden');
   _fromTextInput = true;
   textInputScreen.classList.add('hidden');
+  textCompareBtn.classList.add('hidden');
   resultScreen.classList.remove('hidden');
 }
 
@@ -992,6 +1046,7 @@ backBtn.addEventListener('click', () => {
   if (_fromTextInput) {
     _fromTextInput = false;
     textInputScreen.classList.remove('hidden');
+    textCompareBtn.classList.remove('hidden');
   } else {
     dropScreen.classList.remove('hidden');
     _invoke('watch_files', { leftPath: null, rightPath: null });
