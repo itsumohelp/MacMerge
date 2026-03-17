@@ -16,18 +16,42 @@ button, input, select { -webkit-app-region: no-drag; }
 
 .hidden { display: none !important; }
 
-/* ===== Theme Switcher ===== */
-#theme-switcher {
+/* ===== Top-right control strip ===== */
+#top-right-controls {
   position: fixed;
   top: 10px;
   right: 14px;
   z-index: 1000;
   display: flex;
   align-items: center;
+  gap: 6px;
+  -webkit-app-region: no-drag;
+}
+
+#top-right-controls > button {
+  background: #313244;
+  border: 1px solid #45475a;
+  color: #cdd6f4;
+  border-radius: 6px;
+  padding: 2px 10px;
+  cursor: pointer;
+  font-size: 12px;
+  height: 22px;
+  line-height: 1;
+  transition: background 0.15s;
+}
+
+#top-right-controls > button:hover   { background: #45475a; }
+#top-right-controls > button.active  { background: #585b70; border-color: #7f849c; }
+#top-right-controls > button.copied  { background: #1e3a2f; border-color: #a6e3a1; color: #a6e3a1; }
+
+/* ===== Theme Switcher ===== */
+#theme-switcher {
+  display: flex;
+  align-items: center;
   gap: 8px;
   font-size: 12px;
   color: #cdd6f4;
-  -webkit-app-region: no-drag;
 }
 
 #theme-label {
@@ -67,6 +91,75 @@ button, input, select { -webkit-app-region: no-drag; }
 #theme-toggle:checked::before {
   transform: translateX(18px);
   background: #ffffff;
+}
+
+/* ===== Prompt Panel ===== */
+
+#prompt-panel {
+  position: fixed;
+  top: 40px;
+  right: 14px;
+  width: 380px;
+  background: #1e1e2e;
+  border: 1px solid #45475a;
+  border-radius: 10px;
+  padding: 10px;
+  z-index: 999;
+  box-shadow: 0 6px 24px rgba(0,0,0,0.5);
+}
+
+.prompt-panel-header {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.prompt-panel-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: #cdd6f4;
+}
+
+.prompt-panel-hint {
+  font-size: 11px;
+  color: #6c7086;
+}
+
+#prompt-textarea {
+  width: 100%;
+  height: 140px;
+  background: #181825;
+  color: #cdd6f4;
+  border: 1px solid #313244;
+  border-radius: 6px;
+  padding: 8px;
+  font-family: 'SF Mono', 'Menlo', 'Monaco', monospace;
+  font-size: 12px;
+  resize: vertical;
+  box-sizing: border-box;
+  outline: none;
+  line-height: 1.5;
+}
+
+#prompt-textarea:focus { border-color: #585b70; }
+
+/* Light mode */
+body.light-mode #top-right-controls > button {
+  background: #e2e8f0;
+  border-color: #cbd5e1;
+  color: #334155;
+}
+body.light-mode #top-right-controls > button:hover  { background: #cbd5e1; }
+body.light-mode #top-right-controls > button.active { background: #bfdbfe; border-color: #93c5fd; }
+body.light-mode #prompt-panel {
+  background: #f8fafc;
+  border-color: #cbd5e1;
+}
+body.light-mode #prompt-textarea {
+  background: #ffffff;
+  color: #1f2937;
+  border-color: #e2e8f0;
 }
 
 /* ===== Light Mode ===== */
@@ -165,6 +258,8 @@ body.light-mode .status-same .tree-name { color: #64748b; }
 body.light-mode .status-same .tree-badge { color: #64748b; }
 
 body.light-mode .diff-ln { color: #64748b; }
+body.light-mode .diff-ln-del { background: #fce8ed; }
+body.light-mode .diff-ln-ins { background: #e8f5e9; }
 body.light-mode .diff-ln-filler { background: #eef2ff; }
 body.light-mode .diff-file-sep,
 body.light-mode .tree-legend { color: #94a3b8; }
@@ -589,8 +684,9 @@ body.light-mode #close-ldp:hover { color: #1f2937; }
 }
 
 /* Changed line: left = del side, right = ins side */
-.diff-ln-del  { background: rgba(243,139,168,0.18); color: #f38ba8; }
-.diff-ln-ins  { background: rgba(166,227,161,0.18); color: #a6e3a1; }
+/* diff-ln は position:sticky のため rgba 不可 → 不透明色で指定 */
+.diff-ln-del  { background: #2d1b22; color: #f38ba8; }
+.diff-ln-ins  { background: #1b2d1c; color: #a6e3a1; }
 .diff-code-del  { background: rgba(243,139,168,0.18); }
 .diff-code-ins  { background: rgba(166,227,161,0.18); }
 .diff-code-empty  { background: #181825; }  /* 旧クラス（後方互換） */

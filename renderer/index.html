@@ -8,10 +8,22 @@
 </head>
 <body>
   <div id="app">
-    <label id="theme-switcher" title="テーマ切り替え">
-      <span id="theme-label">🌙</span>
-      <input id="theme-toggle" type="checkbox" aria-label="ダークモードとライトモードを切り替え" />
-    </label>
+    <div id="top-right-controls">
+      <button id="text-compare-btn" class="hidden">比較する (F5)</button>
+      <button id="prompt-toggle-btn" title="プロンプト編集">✏️</button>
+      <button id="copy-prompt-btn" title="比較内容をクリップボードにコピー">📋</button>
+      <label id="theme-switcher" title="テーマ切り替え">
+        <span id="theme-label">🌙</span>
+        <input id="theme-toggle" type="checkbox" aria-label="ダークモードとライトモードを切り替え" />
+      </label>
+    </div>
+    <div id="prompt-panel" class="hidden">
+      <div class="prompt-panel-header">
+        <span class="prompt-panel-title">AIプロンプト</span>
+        <span class="prompt-panel-hint">コピー時に比較内容と結合されます</span>
+      </div>
+      <textarea id="prompt-textarea" placeholder="AIへの指示を入力&#10;例: 以下のコードの差分を説明してください。"></textarea>
+    </div>
     <!-- ======== DROP SCREEN ======== -->
     <div id="drop-screen">
       <div class="app-subtitle">2つのファイルまたはフォルダをドロップして比較</div>
@@ -44,7 +56,6 @@
       <div class="toolbar">
         <button id="text-back-btn">← 戻る</button>
         <span class="result-title">テキストを入力して比較</span>
-        <button id="text-compare-btn">比較する (F5)</button>
       </div>
       <div class="text-input-area">
         <textarea id="text-left" placeholder="左 (Before)"></textarea>
