@@ -16,9 +16,9 @@ yarn-error.log*
 .env
 .env.local
 
-# Tauri / Rust build artifacts
-src-tauri/target/
-src-tauri/WixTools/
+# Swift build artifacts
+swift/.build/
+swift/.swiftpm/
 *.zip
 *.dmg
 *.pkg

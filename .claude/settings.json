@@ -13,7 +13,12 @@
       "Bash(PATH=\"$HOME/.cargo/bin:/usr/local/bin:/opt/homebrew/bin:$PATH\" npx tauri build)",
       "Bash(PATH=\"$HOME/.cargo/bin:/usr/local/bin:/opt/homebrew/bin:$PATH\" ~/.cargo/bin/cargo build)",
       "Bash(PATH=\"$HOME/.cargo/bin:/usr/local/bin:/opt/homebrew/bin:$PATH\" ~/.cargo/bin/cargo build --manifest-path src-tauri/Cargo.toml)",
-      "Bash(PATH=\"$HOME/.cargo/bin:/usr/local/bin:/opt/homebrew/bin:$PATH\" ~/.cargo/bin/cargo check --manifest-path /Users/kusakari/dev/2026/MacMerge/src-tauri/Cargo.toml)"
+      "Bash(PATH=\"$HOME/.cargo/bin:/usr/local/bin:/opt/homebrew/bin:$PATH\" ~/.cargo/bin/cargo check --manifest-path /Users/kusakari/dev/2026/MacMerge/src-tauri/Cargo.toml)",
+      "Bash(swift build:*)",
+      "Bash(sudo xcodebuild:*)"
+    ],
+    "additionalDirectories": [
+      "/Users/kusakari/dev/2026/MacMerge/swift/Sources"
     ]
   }
 }
