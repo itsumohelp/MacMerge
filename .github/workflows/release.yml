@@ -13,28 +13,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: aarch64-apple-darwin,x86_64-apple-darwin
-
-      - name: Install npm dependencies
-        run: npm ci
-
       - name: Sync version from tag
         run: |
           VERSION=${GITHUB_REF#refs/tags/v}
-          # package.json
-          sed -i '' "s/\"version\": \".*\"/\"version\": \"${VERSION}\"/" package.json
-          # tauri.conf.json
-          sed -i '' "s/\"version\": \".*\"/\"version\": \"${VERSION}\"/" src-tauri/tauri.conf.json
-          # Cargo.toml (最初の version = 行のみ)
-          sed -i '' "1,/^version = /s/^version = \".*\"/version = \"${VERSION}\"/" src-tauri/Cargo.toml
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
 
       - name: Import Apple certificate
         env:
@@ -83,7 +65,47 @@ jobs:
           echo "$NOTES" >> $GITHUB_ENV
           echo "EOF" >> $GITHUB_ENV
 
-      - name: Build, sign and notarize
+      - name: Build universal Swift app
+        run: |
+          mkdir -p dist
+          cd swift
+          swift build -c release --arch arm64
+          swift build -c release --arch x86_64
+          cd ..
+
+          lipo -create \
+            swift/.build/arm64-apple-macosx/release/MacMerge \
+            swift/.build/x86_64-apple-macosx/release/MacMerge \
+            -output dist/MacMerge
+          chmod +x dist/MacMerge
+
+          APP_DIR="dist/MacMerge.app"
+          mkdir -p "$APP_DIR/Contents/MacOS" "$APP_DIR/Contents/Resources"
+          cp dist/MacMerge "$APP_DIR/Contents/MacOS/MacMerge"
+          cp swift/Sources/MacMerge/Resources/icon.icns "$APP_DIR/Contents/Resources/icon.icns"
+
+          cat > "$APP_DIR/Contents/Info.plist" <<EOF
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>CFBundleDevelopmentRegion</key><string>ja</string>
+            <key>CFBundleDisplayName</key><string>MacMerge</string>
+            <key>CFBundleExecutable</key><string>MacMerge</string>
+            <key>CFBundleIconFile</key><string>icon.icns</string>
+            <key>CFBundleIdentifier</key><string>com.macmerge.app</string>
+            <key>CFBundleInfoDictionaryVersion</key><string>6.0</string>
+            <key>CFBundleName</key><string>MacMerge</string>
+            <key>CFBundlePackageType</key><string>APPL</string>
+            <key>CFBundleShortVersionString</key><string>${VERSION}</string>
+            <key>CFBundleVersion</key><string>${VERSION}</string>
+            <key>LSMinimumSystemVersion</key><string>13.0</string>
+            <key>NSHighResolutionCapable</key><true/>
+          </dict>
+          </plist>
+          EOF
+
+      - name: Sign and notarize app
         env:
           APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
           APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
@@ -91,11 +113,30 @@ jobs:
           APPLE_API_KEY_PATH: ${{ env.APPLE_API_KEY_PATH }}
         run: |
           security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
-          npm run build -- --target universal-apple-darwin
+          APP_DIR="dist/MacMerge.app"
+          DMG_PATH="dist/MacMerge_${VERSION}_universal.dmg"
+
+          codesign --force --deep --options runtime --timestamp \
+            --sign "$APPLE_SIGNING_IDENTITY" "$APP_DIR"
+
+          hdiutil create \
+            -volname "MacMerge" \
+            -srcfolder "$APP_DIR" \
+            -ov -format UDZO "$DMG_PATH"
+
+          codesign --force --timestamp --sign "$APPLE_SIGNING_IDENTITY" "$DMG_PATH"
+
+          xcrun notarytool submit "$DMG_PATH" \
+            --key "$APPLE_API_KEY_PATH" \
+            --key-id "$APPLE_API_KEY" \
+            --issuer "$APPLE_API_ISSUER" \
+            --wait
+
+          xcrun stapler staple "$DMG_PATH"
 
       - name: Upload DMG to release
         uses: softprops/action-gh-release@v2
         with:
           draft: true
           body: ${{ env.RELEASE_NOTES }}
-          files: src-tauri/target/universal-apple-darwin/release/bundle/dmg/*.dmg
+          files: dist/*.dmg
