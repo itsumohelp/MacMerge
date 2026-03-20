@@ -40,9 +40,7 @@ jobs:
           fi
           LATEST_TAG="$(printf "%s\n" "$TAGS" | tail -n 1)"
           LATEST_VER="${LATEST_TAG#v}"
-          IFS='.' read -r MAJOR MINOR PATCH <<EOF
-$LATEST_VER
-EOF
+          IFS='.' read -r MAJOR MINOR PATCH <<< "$LATEST_VER"
           NEXT_TAG="v${MAJOR}.${MINOR}.$((PATCH + 1))"
 
           SLOT="${{ inputs.rollback_slot }}"
