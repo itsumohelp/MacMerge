@@ -1,24 +1,22 @@
-name: Manual Release Draft
+name: Release Draft (Rollback)
 
 on:
   workflow_dispatch:
     inputs:
-      release_mode:
-        description: "実行モード: patch(通常) / rollback(過去版ロールバック)"
+      rollback_slot:
+        description: "ロールバック元（latest-1 が直近。latest-5 まで選択可）"
         required: true
         type: choice
         options:
-          - patch
-          - rollback
-        default: patch
-      rollback_tag:
-        description: "rollback時のみ指定 (例: v2.0.3)。最新5件のタグのみ有効"
-        required: false
-        type: string
-        default: ""
+          - latest-1
+          - latest-2
+          - latest-3
+          - latest-4
+          - latest-5
+        default: latest-1
 
 jobs:
-  draft-release:
+  draft-release-rollback:
     runs-on: macos-latest
     permissions:
       contents: write
@@ -29,69 +27,47 @@ jobs:
           ref: main
           fetch-depth: 0
 
-      - name: Resolve version and source ref
+      - name: Resolve rollback source and new patch tag
         id: resolve
         shell: bash
         run: |
           set -euo pipefail
           git fetch --tags --force origin
-
-          mapfile -t TAGS < <(git tag -l 'v[0-9]*.[0-9]*.[0-9]*' | sort -V)
-          if [ ${#TAGS[@]} -eq 0 ]; then
+          TAGS="$(git tag -l 'v[0-9]*.[0-9]*.[0-9]*' | sort -V)"
+          if [ -z "$TAGS" ]; then
             echo "No semantic version tags found (vX.Y.Z)." >&2
             exit 1
           fi
-
-          LATEST_TAG="${TAGS[${#TAGS[@]}-1]}"
+          LATEST_TAG="$(printf "%s\n" "$TAGS" | tail -n 1)"
           LATEST_VER="${LATEST_TAG#v}"
-          IFS='.' read -r MAJOR MINOR PATCH <<< "$LATEST_VER"
-          NEXT_PATCH=$((PATCH + 1))
-          NEXT_TAG="v${MAJOR}.${MINOR}.${NEXT_PATCH}"
+          IFS='.' read -r MAJOR MINOR PATCH <<EOF
+$LATEST_VER
+EOF
+          NEXT_TAG="v${MAJOR}.${MINOR}.$((PATCH + 1))"
 
-          # 最新5件(新しい順)
-          LATEST5=$(printf "%s\n" "${TAGS[@]}" | sort -V | tail -n 5 | tac)
-          echo "Latest 5 tags:"
-          echo "$LATEST5"
+          SLOT="${{ inputs.rollback_slot }}"
+          case "$SLOT" in
+            latest-1) IDX=1 ;;
+            latest-2) IDX=2 ;;
+            latest-3) IDX=3 ;;
+            latest-4) IDX=4 ;;
+            latest-5) IDX=5 ;;
+            *) echo "Unknown rollback slot: $SLOT" >&2; exit 1 ;;
+          esac
 
-          MODE="${{ inputs.release_mode }}"
-          ROLLBACK_TAG="${{ inputs.rollback_tag }}"
-
-          if [ "$MODE" = "patch" ]; then
-            SOURCE_REF="main"
-            TARGET_TAG="$NEXT_TAG"
-            TITLE="$TARGET_TAG"
-            BODY_HEAD="Mode: patch (main からの通常リリース)"
-          elif [ "$MODE" = "rollback" ]; then
-            if [ -z "$ROLLBACK_TAG" ]; then
-              echo "rollback mode requires rollback_tag input." >&2
-              exit 1
-            fi
-            if ! echo "$LATEST5" | grep -qx "$ROLLBACK_TAG"; then
-              echo "rollback_tag '$ROLLBACK_TAG' is not in latest 5 versions." >&2
-              exit 1
-            fi
-            SOURCE_REF="$ROLLBACK_TAG"
-            TARGET_TAG="$NEXT_TAG"
-            TITLE="$TARGET_TAG (rollback from $ROLLBACK_TAG)"
-            BODY_HEAD="Mode: rollback ($ROLLBACK_TAG の内容を再リリース)"
-          else
-            echo "Unknown mode: $MODE" >&2
+          SOURCE_TAG="$(printf "%s\n" "$TAGS" | tail -n "$IDX" | head -n 1)"
+          if [ -z "$SOURCE_TAG" ]; then
+            echo "Not enough tags for slot: $SLOT" >&2
             exit 1
           fi
 
-          echo "source_ref=$SOURCE_REF" >> "$GITHUB_OUTPUT"
-          echo "target_tag=$TARGET_TAG" >> "$GITHUB_OUTPUT"
-          echo "title=$TITLE" >> "$GITHUB_OUTPUT"
-          {
-            echo "body_head<<EOF"
-            echo "$BODY_HEAD"
-            echo "EOF"
-          } >> "$GITHUB_OUTPUT"
+          echo "source_tag=$SOURCE_TAG" >> "$GITHUB_OUTPUT"
+          echo "target_tag=$NEXT_TAG" >> "$GITHUB_OUTPUT"
 
-      - name: Checkout source ref for build
+      - name: Checkout rollback source
         uses: actions/checkout@v4
         with:
-          ref: ${{ steps.resolve.outputs.source_ref }}
+          ref: ${{ steps.resolve.outputs.source_tag }}
           fetch-depth: 0
 
       - name: Import Apple certificate
@@ -104,21 +80,13 @@ jobs:
           CERTIFICATE_PATH=$RUNNER_TEMP/certificate.p12
           KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
           KEYCHAIN_PASSWORD=$(openssl rand -hex 32)
-
           echo "$APPLE_CERTIFICATE" | base64 --decode > "$CERTIFICATE_PATH"
-
           security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
           security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
           security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
-          security import "$CERTIFICATE_PATH" \
-            -k "$KEYCHAIN_PATH" \
-            -P "$APPLE_CERTIFICATE_PASSWORD" \
-            -T /usr/bin/codesign
+          security import "$CERTIFICATE_PATH" -k "$KEYCHAIN_PATH" -P "$APPLE_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
           security list-keychains -d user -s "$KEYCHAIN_PATH"
-          security set-key-partition-list \
-            -S apple-tool:,apple: \
-            -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
-
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
           rm "$CERTIFICATE_PATH"
           echo "KEYCHAIN_PATH=$KEYCHAIN_PATH" >> "$GITHUB_ENV"
           echo "KEYCHAIN_PASSWORD=$KEYCHAIN_PASSWORD" >> "$GITHUB_ENV"
@@ -141,30 +109,21 @@ jobs:
           set -euo pipefail
           VERSION="${{ steps.resolve.outputs.target_tag }}"
           VERSION="${VERSION#v}"
-
           mkdir -p dist
           cd swift
           swift build -c release --arch arm64
           swift build -c release --arch x86_64
           cd ..
-
-          lipo -create \
-            swift/.build/arm64-apple-macosx/release/MacMerge \
-            swift/.build/x86_64-apple-macosx/release/MacMerge \
-            -output dist/MacMerge
+          lipo -create swift/.build/arm64-apple-macosx/release/MacMerge swift/.build/x86_64-apple-macosx/release/MacMerge -output dist/MacMerge
           chmod +x dist/MacMerge
-
           APP_DIR="dist/MacMerge.app"
           mkdir -p "$APP_DIR/Contents/MacOS" "$APP_DIR/Contents/Resources"
           cp dist/MacMerge "$APP_DIR/Contents/MacOS/MacMerge"
           cp swift/Sources/MacMerge/Resources/icon.icns "$APP_DIR/Contents/Resources/icon.icns"
-
           cat > "$APP_DIR/Contents/Info.plist" <<EOF
           <?xml version="1.0" encoding="UTF-8"?>
           <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-          <plist version="1.0">
-          <dict>
-            <key>CFBundleDevelopmentRegion</key><string>ja</string>
+          <plist version="1.0"><dict>
             <key>CFBundleDisplayName</key><string>MacMerge</string>
             <key>CFBundleExecutable</key><string>MacMerge</string>
             <key>CFBundleIconFile</key><string>icon.icns</string>
@@ -176,8 +135,7 @@ jobs:
             <key>CFBundleVersion</key><string>${VERSION}</string>
             <key>LSMinimumSystemVersion</key><string>13.0</string>
             <key>NSHighResolutionCapable</key><true/>
-          </dict>
-          </plist>
+          </dict></plist>
           EOF
 
       - name: Sign and notarize app
@@ -190,28 +148,12 @@ jobs:
         run: |
           set -euo pipefail
           security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
-
-          TAG="${{ steps.resolve.outputs.target_tag }}"
-          VERSION="${TAG#v}"
-          APP_DIR="dist/MacMerge.app"
-          DMG_PATH="dist/MacMerge_${VERSION}_universal.dmg"
-
-          codesign --force --deep --options runtime --timestamp \
-            --sign "$APPLE_SIGNING_IDENTITY" "$APP_DIR"
-
-          hdiutil create \
-            -volname "MacMerge" \
-            -srcfolder "$APP_DIR" \
-            -ov -format UDZO "$DMG_PATH"
-
+          VERSION="${{ steps.resolve.outputs.target_tag }}"; VERSION="${VERSION#v}"
+          APP_DIR="dist/MacMerge.app"; DMG_PATH="dist/MacMerge_${VERSION}_universal.dmg"
+          codesign --force --deep --options runtime --timestamp --sign "$APPLE_SIGNING_IDENTITY" "$APP_DIR"
+          hdiutil create -volname "MacMerge" -srcfolder "$APP_DIR" -ov -format UDZO "$DMG_PATH"
           codesign --force --timestamp --sign "$APPLE_SIGNING_IDENTITY" "$DMG_PATH"
-
-          xcrun notarytool submit "$DMG_PATH" \
-            --key "$APPLE_API_KEY_PATH" \
-            --key-id "$APPLE_API_KEY" \
-            --issuer "$APPLE_API_ISSUER" \
-            --wait
-
+          xcrun notarytool submit "$DMG_PATH" --key "$APPLE_API_KEY_PATH" --key-id "$APPLE_API_KEY" --issuer "$APPLE_API_ISSUER" --wait
           xcrun stapler staple "$DMG_PATH"
 
       - name: Publish draft release
@@ -219,10 +161,10 @@ jobs:
         with:
           tag_name: ${{ steps.resolve.outputs.target_tag }}
           target_commitish: main
-          name: ${{ steps.resolve.outputs.title }}
+          name: ${{ steps.resolve.outputs.target_tag }} (rollback from ${{ steps.resolve.outputs.source_tag }})
           draft: true
           body: |
-            ${{ steps.resolve.outputs.body_head }}
-            source_ref: `${{ steps.resolve.outputs.source_ref }}`
+            Mode: rollback
+            source_tag: `${{ steps.resolve.outputs.source_tag }}`
             target_tag: `${{ steps.resolve.outputs.target_tag }}`
           files: dist/*.dmg

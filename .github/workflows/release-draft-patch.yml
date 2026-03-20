@@ -1,0 +1,133 @@
+name: Release Draft (Patch)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  draft-release-patch:
+    runs-on: macos-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Resolve next patch tag
+        id: resolve
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --tags --force origin
+          TAGS="$(git tag -l 'v[0-9]*.[0-9]*.[0-9]*' | sort -V)"
+          if [ -z "$TAGS" ]; then
+            echo "No semantic version tags found (vX.Y.Z)." >&2
+            exit 1
+          fi
+          LATEST_TAG="$(printf "%s\n" "$TAGS" | tail -n 1)"
+          LATEST_VER="${LATEST_TAG#v}"
+          IFS='.' read -r MAJOR MINOR PATCH <<EOF
+$LATEST_VER
+EOF
+          NEXT_TAG="v${MAJOR}.${MINOR}.$((PATCH + 1))"
+          echo "target_tag=$NEXT_TAG" >> "$GITHUB_OUTPUT"
+
+      - name: Import Apple certificate
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          CERTIFICATE_PATH=$RUNNER_TEMP/certificate.p12
+          KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
+          KEYCHAIN_PASSWORD=$(openssl rand -hex 32)
+          echo "$APPLE_CERTIFICATE" | base64 --decode > "$CERTIFICATE_PATH"
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security import "$CERTIFICATE_PATH" -k "$KEYCHAIN_PATH" -P "$APPLE_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
+          security list-keychains -d user -s "$KEYCHAIN_PATH"
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          rm "$CERTIFICATE_PATH"
+          echo "KEYCHAIN_PATH=$KEYCHAIN_PATH" >> "$GITHUB_ENV"
+          echo "KEYCHAIN_PASSWORD=$KEYCHAIN_PASSWORD" >> "$GITHUB_ENV"
+
+      - name: Write App Store Connect API key
+        env:
+          APPLE_API_KEY_CONTENT: ${{ secrets.APPLE_API_KEY_CONTENT }}
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p $HOME/.private_keys
+          KEY_PATH="$HOME/.private_keys/AuthKey_${APPLE_API_KEY}.p8"
+          echo "$APPLE_API_KEY_CONTENT" | base64 --decode > "$KEY_PATH"
+          echo "APPLE_API_KEY_PATH=$KEY_PATH" >> $GITHUB_ENV
+
+      - name: Build universal Swift app
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION="${{ steps.resolve.outputs.target_tag }}"
+          VERSION="${VERSION#v}"
+          mkdir -p dist
+          cd swift
+          swift build -c release --arch arm64
+          swift build -c release --arch x86_64
+          cd ..
+          lipo -create swift/.build/arm64-apple-macosx/release/MacMerge swift/.build/x86_64-apple-macosx/release/MacMerge -output dist/MacMerge
+          chmod +x dist/MacMerge
+          APP_DIR="dist/MacMerge.app"
+          mkdir -p "$APP_DIR/Contents/MacOS" "$APP_DIR/Contents/Resources"
+          cp dist/MacMerge "$APP_DIR/Contents/MacOS/MacMerge"
+          cp swift/Sources/MacMerge/Resources/icon.icns "$APP_DIR/Contents/Resources/icon.icns"
+          cat > "$APP_DIR/Contents/Info.plist" <<EOF
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0"><dict>
+            <key>CFBundleDisplayName</key><string>MacMerge</string>
+            <key>CFBundleExecutable</key><string>MacMerge</string>
+            <key>CFBundleIconFile</key><string>icon.icns</string>
+            <key>CFBundleIdentifier</key><string>com.macmerge.app</string>
+            <key>CFBundleInfoDictionaryVersion</key><string>6.0</string>
+            <key>CFBundleName</key><string>MacMerge</string>
+            <key>CFBundlePackageType</key><string>APPL</string>
+            <key>CFBundleShortVersionString</key><string>${VERSION}</string>
+            <key>CFBundleVersion</key><string>${VERSION}</string>
+            <key>LSMinimumSystemVersion</key><string>13.0</string>
+            <key>NSHighResolutionCapable</key><true/>
+          </dict></plist>
+          EOF
+
+      - name: Sign and notarize app
+        env:
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          APPLE_API_KEY_PATH: ${{ env.APPLE_API_KEY_PATH }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          VERSION="${{ steps.resolve.outputs.target_tag }}"; VERSION="${VERSION#v}"
+          APP_DIR="dist/MacMerge.app"; DMG_PATH="dist/MacMerge_${VERSION}_universal.dmg"
+          codesign --force --deep --options runtime --timestamp --sign "$APPLE_SIGNING_IDENTITY" "$APP_DIR"
+          hdiutil create -volname "MacMerge" -srcfolder "$APP_DIR" -ov -format UDZO "$DMG_PATH"
+          codesign --force --timestamp --sign "$APPLE_SIGNING_IDENTITY" "$DMG_PATH"
+          xcrun notarytool submit "$DMG_PATH" --key "$APPLE_API_KEY_PATH" --key-id "$APPLE_API_KEY" --issuer "$APPLE_API_ISSUER" --wait
+          xcrun stapler staple "$DMG_PATH"
+
+      - name: Publish draft release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.resolve.outputs.target_tag }}
+          target_commitish: main
+          name: ${{ steps.resolve.outputs.target_tag }}
+          draft: true
+          body: |
+            Mode: patch (main からの通常リリース)
+            target_tag: `${{ steps.resolve.outputs.target_tag }}`
+          files: dist/*.dmg
