@@ -26,6 +26,7 @@ final class DirCompareViewController: NSViewController {
     private let countLabel = NSTextField(labelWithString: "")
     private let leftLabel  = NSTextField(labelWithString: "")
     private let rightLabel = NSTextField(labelWithString: "")
+    private var shortcutMonitor: Any?
 
     // MARK: - Init
 
@@ -47,6 +48,20 @@ final class DirCompareViewController: NSViewController {
         }
         buildUI()
         loadComparison()
+    }
+
+    override func viewDidAppear() {
+        super.viewDidAppear()
+        installShortcutMonitorIfNeeded()
+    }
+
+    override func viewWillDisappear() {
+        super.viewWillDisappear()
+        removeShortcutMonitor()
+    }
+
+    deinit {
+        removeShortcutMonitor()
     }
 
     // MARK: - Build UI
@@ -222,6 +237,35 @@ final class DirCompareViewController: NSViewController {
     @objc private func goBack() {
         (view.window?.windowController as? WindowController)?.pop()
     }
+
+    private func installShortcutMonitorIfNeeded() {
+        guard shortcutMonitor == nil else { return }
+        shortcutMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+            guard let self else { return event }
+            guard event.modifierFlags.contains(.command),
+                  let key = event.charactersIgnoringModifiers?.lowercased() else { return event }
+            switch key {
+            case "r":
+                self.loadComparison()
+                return nil
+            case "w":
+                self.view.window?.performClose(nil)
+                return nil
+            case "q":
+                NSApp.terminate(nil)
+                return nil
+            default:
+                return event
+            }
+        }
+    }
+
+    private func removeShortcutMonitor() {
+        if let shortcutMonitor {
+            NSEvent.removeMonitor(shortcutMonitor)
+            self.shortcutMonitor = nil
+        }
+    }
 }
 
 // MARK: - NSTableViewDataSource / Delegate
@@ -287,6 +331,7 @@ extension DirCompareViewController: NSTableViewDataSource, NSTableViewDelegate {
         case .changed:
             guard let l = entry.leftURL, let r = entry.rightURL else { return }
             (view.window?.windowController as? WindowController)?.showDiff(left: l, right: r)
+            tableView.deselectRow(row)
 
         case .binaryDiff:
             let alert = NSAlert()

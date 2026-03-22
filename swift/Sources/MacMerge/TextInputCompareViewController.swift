@@ -231,6 +231,22 @@ final class TextInputCompareViewController: NSViewController {
             guard !mods.isEmpty else { return event }
             guard let key = event.charactersIgnoringModifiers?.lowercased() else { return event }
 
+            if event.modifierFlags.contains(.command) {
+                switch key {
+                case "r":
+                    self.compareText()
+                    return nil
+                case "w":
+                    self.view.window?.performClose(nil)
+                    return nil
+                case "q":
+                    NSApp.terminate(nil)
+                    return nil
+                default:
+                    break
+                }
+            }
+
             let target: NSTextView? = {
                 if let active = self.activeEditor { return active }
                 return self.view.window?.firstResponder as? NSTextView

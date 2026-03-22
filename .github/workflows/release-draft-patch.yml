@@ -82,6 +82,7 @@ jobs:
           mkdir -p "$APP_DIR/Contents/MacOS" "$APP_DIR/Contents/Resources"
           cp dist/MacMerge "$APP_DIR/Contents/MacOS/MacMerge"
           cp swift/Sources/MacMerge/Resources/icon.icns "$APP_DIR/Contents/Resources/icon.icns"
+          cp CHANGELOG.md "$APP_DIR/Contents/Resources/CHANGELOG.md"
           cat > "$APP_DIR/Contents/Info.plist" <<EOF
           <?xml version="1.0" encoding="UTF-8"?>
           <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">

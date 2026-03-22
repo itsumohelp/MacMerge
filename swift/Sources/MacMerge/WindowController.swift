@@ -11,7 +11,7 @@ final class WindowController: NSWindowController {
             backing: .buffered,
             defer: false
         )
-        window.title = "MacMerge"
+        window.title = AppVersion.displayTitle()
         window.minSize = NSSize(width: 800, height: 500)
         window.center()
         window.titlebarAppearsTransparent = true
