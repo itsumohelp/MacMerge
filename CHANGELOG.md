@@ -1,5 +1,25 @@
 # Changelog
 
+## v2.0.1
+
+### English
+
+#### Improvements
+- **Diff jump navigation** — Added previous/next diff navigation in the file diff header and shortcuts (`Cmd+↑` / `Cmd+↓`) to move across changed rows quickly.
+- **Search bar layout fix** — Adjusted spacing so the search input no longer overlaps the diff view.
+
+#### Docs
+- **README bilingual structure** — Reorganized README to English first, then Japanese, and documented Finder Quick Action setup there.
+
+### 日本語
+
+#### 改善
+- **差分ジャンプ操作を追加** — ファイル差分ヘッダーに「前/次の差分」操作を追加し、ショートカット（`Cmd+↑` / `Cmd+↓`）で差分行を素早く移動できるようにしました。
+- **検索バー重なりを修正** — 検索入力欄が差分ビューに重ならないよう、レイアウトの間隔を調整しました。
+
+#### ドキュメント
+- **READMEの二言語構成を整理** — READMEを「英語 → 日本語」の順に再構成し、Finderクイックアクション手順もREADMEへ記載しました。
+
 ## v2.0.0
 
 ### アーキテクチャ
