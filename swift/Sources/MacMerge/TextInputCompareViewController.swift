@@ -59,7 +59,7 @@ final class TextInputCompareViewController: NSViewController {
     private var keyMonitor: Any?
 
     override func loadView() {
-        view = CompareDropView(frame: NSRect(x: 0, y: 0, width: 1200, height: 800))
+        view = CompareDropView(frame: NSRect(x: 0, y: 0, width: 600, height: 400))
         view.wantsLayer = true
     }
 

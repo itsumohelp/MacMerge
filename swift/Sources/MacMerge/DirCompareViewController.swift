@@ -39,7 +39,7 @@ final class DirCompareViewController: NSViewController {
     // MARK: - Lifecycle
 
     override func loadView() {
-        view = CompareDropView(frame: NSRect(x: 0, y: 0, width: 1200, height: 800))
+        view = CompareDropView(frame: NSRect(x: 0, y: 0, width: 600, height: 400))
     }
 
     override func viewDidLoad() {
@@ -88,11 +88,17 @@ final class DirCompareViewController: NSViewController {
             lbl.textColor = .secondaryLabelColor
             lbl.lineBreakMode = .byTruncatingMiddle
             lbl.translatesAutoresizingMaskIntoConstraints = false
+            lbl.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+            lbl.setContentHuggingPriority(.defaultLow, for: .horizontal)
         }
 
         countLabel.font = .systemFont(ofSize: 11)
         countLabel.textColor = .tertiaryLabelColor
         countLabel.translatesAutoresizingMaskIntoConstraints = false
+        countLabel.lineBreakMode = .byTruncatingTail
+        countLabel.maximumNumberOfLines = 1
+        countLabel.setContentCompressionResistancePriority(.defaultHigh, for: .horizontal)
+        countLabel.setContentHuggingPriority(.defaultHigh, for: .horizontal)
 
         for v in [backBtn, reloadButton, leftLabel, rightLabel, countLabel] as [NSView] {
             header.addSubview(v)

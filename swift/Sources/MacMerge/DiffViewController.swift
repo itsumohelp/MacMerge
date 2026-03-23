@@ -210,7 +210,7 @@ final class CharDiffView: NSView {
 
 // MARK: - DiffViewController
 
-final class DiffViewController: NSViewController, NSSearchFieldDelegate {
+final class DiffViewController: NSViewController {
 
     var leftURL:  URL?
     var rightURL: URL?
@@ -241,15 +241,9 @@ final class DiffViewController: NSViewController, NSSearchFieldDelegate {
 
     private let leftLabel  = NSTextField(labelWithString: "")
     private let rightLabel = NSTextField(labelWithString: "")
-    private let searchBar = NSView()
-    private let searchField = NSSearchField()
-    private let searchCountLabel = NSTextField(labelWithString: "0/0")
     private let reloadButton = NSButton(title: "⟳ 再読み込み", target: nil, action: nil)
     private let prevDiffButton = NSButton(title: "◀ 差分", target: nil, action: nil)
     private let nextDiffButton = NSButton(title: "差分 ▶", target: nil, action: nil)
-    private var searchBarHeight: NSLayoutConstraint!
-    private var searchMatches: [Int] = []
-    private var currentSearchMatchIndex: Int = -1
     private var diffRows: [Int] = []
     private var currentDiffIndex: Int = -1
     private let infoBar = NSView()
@@ -277,7 +271,7 @@ final class DiffViewController: NSViewController, NSSearchFieldDelegate {
     // MARK: - Lifecycle
 
     override func loadView() {
-        view = CompareDropView(frame: NSRect(x: 0, y: 0, width: 1200, height: 800))
+        view = CompareDropView(frame: NSRect(x: 0, y: 0, width: 600, height: 400))
         view.wantsLayer = true
     }
 
@@ -311,7 +305,6 @@ final class DiffViewController: NSViewController, NSSearchFieldDelegate {
     // MARK: - Build UI
 
     private func buildUI() {
-        let headerBottomSpacing: CGFloat = 6
         let contentTopSpacing: CGFloat = 6
         // ── Header ──────────────────────────────────────────────
         let header = NSView()
@@ -341,6 +334,8 @@ final class DiffViewController: NSViewController, NSSearchFieldDelegate {
             lbl.textColor = .secondaryLabelColor
             lbl.lineBreakMode = .byTruncatingMiddle
             lbl.translatesAutoresizingMaskIntoConstraints = false
+            lbl.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+            lbl.setContentHuggingPriority(.defaultLow, for: .horizontal)
         }
         header.addSubview(backBtn)
         header.addSubview(reloadButton)
@@ -349,21 +344,6 @@ final class DiffViewController: NSViewController, NSSearchFieldDelegate {
         header.addSubview(leftLabel)
         header.addSubview(rightLabel)
         view.addSubview(header)
-
-        // ── Search bar (Cmd+F) ──────────────────────────────────
-        searchBar.wantsLayer = true
-        searchBar.layer?.backgroundColor = NSColor.windowBackgroundColor.cgColor
-        searchBar.translatesAutoresizingMaskIntoConstraints = false
-        searchField.placeholderString = "部分一致で検索"
-        searchField.sendsSearchStringImmediately = true
-        searchField.delegate = self
-        searchField.translatesAutoresizingMaskIntoConstraints = false
-        searchCountLabel.font = .monospacedSystemFont(ofSize: 10, weight: .regular)
-        searchCountLabel.textColor = .secondaryLabelColor
-        searchCountLabel.translatesAutoresizingMaskIntoConstraints = false
-        searchBar.addSubview(searchField)
-        searchBar.addSubview(searchCountLabel)
-        view.addSubview(searchBar)
 
         // ── Center line number gutters (draw-based) ──────────────
         leftNumView  = LineNumberView(); leftNumView.isLeft  = true
@@ -423,7 +403,6 @@ final class DiffViewController: NSViewController, NSSearchFieldDelegate {
         // ── Constraints ──────────────────────────────────────────
         leftNumW  = leftNumView.widthAnchor.constraint(equalToConstant: currentNumWidth)
         rightNumW = rightNumView.widthAnchor.constraint(equalToConstant: currentNumWidth)
-        searchBarHeight = searchBar.heightAnchor.constraint(equalToConstant: 0)
 
         NSLayoutConstraint.activate([
             // Header
@@ -446,43 +425,32 @@ final class DiffViewController: NSViewController, NSSearchFieldDelegate {
             rightLabel.leadingAnchor.constraint(equalTo: header.centerXAnchor, constant: 8),
             rightLabel.trailingAnchor.constraint(lessThanOrEqualTo: header.trailingAnchor, constant: -12),
 
-            // Search bar
-            searchBar.topAnchor.constraint(equalTo: header.bottomAnchor, constant: headerBottomSpacing),
-            searchBar.leadingAnchor.constraint(equalTo: view.leadingAnchor),
-            searchBar.trailingAnchor.constraint(equalTo: view.trailingAnchor),
-            searchBarHeight,
-            searchField.leadingAnchor.constraint(equalTo: searchBar.leadingAnchor, constant: 12),
-            searchField.centerYAnchor.constraint(equalTo: searchBar.centerYAnchor),
-            searchField.trailingAnchor.constraint(equalTo: searchCountLabel.leadingAnchor, constant: -10),
-            searchCountLabel.trailingAnchor.constraint(equalTo: searchBar.trailingAnchor, constant: -12),
-            searchCountLabel.centerYAnchor.constraint(equalTo: searchBar.centerYAnchor),
-
             // Divider
-            div.topAnchor.constraint(equalTo: searchBar.bottomAnchor, constant: contentTopSpacing),
+            div.topAnchor.constraint(equalTo: header.bottomAnchor, constant: contentTopSpacing),
             div.bottomAnchor.constraint(equalTo: infoBar.topAnchor),
             div.centerXAnchor.constraint(equalTo: view.centerXAnchor),
             div.widthAnchor.constraint(equalToConstant: 1),
 
             // Left edge gutter (line numbers)
             leftNumW,
-            leftNumView.topAnchor.constraint(equalTo: searchBar.bottomAnchor, constant: contentTopSpacing),
+            leftNumView.topAnchor.constraint(equalTo: header.bottomAnchor, constant: contentTopSpacing),
             leftNumView.bottomAnchor.constraint(equalTo: infoBar.topAnchor),
             leftNumView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
 
             // Left code scroll
-            leftCodeScroll.topAnchor.constraint(equalTo: searchBar.bottomAnchor, constant: contentTopSpacing),
+            leftCodeScroll.topAnchor.constraint(equalTo: header.bottomAnchor, constant: contentTopSpacing),
             leftCodeScroll.bottomAnchor.constraint(equalTo: infoBar.topAnchor),
             leftCodeScroll.leadingAnchor.constraint(equalTo: leftNumView.trailingAnchor),
             leftCodeScroll.trailingAnchor.constraint(equalTo: div.leadingAnchor),
 
             // Right center gutter (line numbers)
             rightNumW,
-            rightNumView.topAnchor.constraint(equalTo: searchBar.bottomAnchor, constant: contentTopSpacing),
+            rightNumView.topAnchor.constraint(equalTo: header.bottomAnchor, constant: contentTopSpacing),
             rightNumView.bottomAnchor.constraint(equalTo: infoBar.topAnchor),
             rightNumView.leadingAnchor.constraint(equalTo: div.trailingAnchor),
 
             // Right code scroll
-            rightCodeScroll.topAnchor.constraint(equalTo: searchBar.bottomAnchor, constant: contentTopSpacing),
+            rightCodeScroll.topAnchor.constraint(equalTo: header.bottomAnchor, constant: contentTopSpacing),
             rightCodeScroll.bottomAnchor.constraint(equalTo: infoBar.topAnchor),
             rightCodeScroll.leadingAnchor.constraint(equalTo: rightNumView.trailingAnchor),
             rightCodeScroll.trailingAnchor.constraint(equalTo: view.trailingAnchor),
@@ -671,9 +639,6 @@ final class DiffViewController: NSViewController, NSSearchFieldDelegate {
             let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
             guard flags.contains(.command) else { return event }
             switch event.keyCode {
-            case 3: // F
-                self.showSearchBar()
-                return nil
             case 15: // R
                 self.reloadComparison()
                 return nil
@@ -700,92 +665,6 @@ final class DiffViewController: NSViewController, NSSearchFieldDelegate {
             NSEvent.removeMonitor(shortcutMonitor)
             self.shortcutMonitor = nil
         }
-    }
-
-    private func showSearchBar() {
-        if searchBarHeight.constant == 0 {
-            searchBarHeight.constant = 32
-            view.layoutSubtreeIfNeeded()
-        }
-        view.window?.makeFirstResponder(searchField)
-        searchField.selectText(nil)
-        updateSearchMatches(jumpToFirst: false)
-    }
-
-    private func hideSearchBar() {
-        searchBarHeight.constant = 0
-        searchField.stringValue = ""
-        searchMatches.removeAll()
-        currentSearchMatchIndex = -1
-        searchCountLabel.stringValue = "0/0"
-        view.layoutSubtreeIfNeeded()
-    }
-
-    private func updateSearchMatches(jumpToFirst: Bool) {
-        let query = searchField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
-        if query.isEmpty {
-            searchMatches.removeAll()
-            currentSearchMatchIndex = -1
-            searchCountLabel.stringValue = "0/0"
-            return
-        }
-
-        searchMatches = rows.enumerated().compactMap { idx, row in
-            let hitL = row.leftText.localizedCaseInsensitiveContains(query)
-            let hitR = row.rightText.localizedCaseInsensitiveContains(query)
-            return (hitL || hitR) ? idx : nil
-        }
-
-        if searchMatches.isEmpty {
-            currentSearchMatchIndex = -1
-            searchCountLabel.stringValue = "0/0"
-            return
-        }
-
-        if jumpToFirst || currentSearchMatchIndex < 0 || currentSearchMatchIndex >= searchMatches.count {
-            currentSearchMatchIndex = 0
-        }
-        jumpToSearchMatch()
-    }
-
-    private func moveSearchMatch(forward: Bool) {
-        guard !searchMatches.isEmpty else { return }
-        if currentSearchMatchIndex < 0 {
-            currentSearchMatchIndex = 0
-        } else if forward {
-            currentSearchMatchIndex = (currentSearchMatchIndex + 1) % searchMatches.count
-        } else {
-            currentSearchMatchIndex = (currentSearchMatchIndex - 1 + searchMatches.count) % searchMatches.count
-        }
-        jumpToSearchMatch()
-    }
-
-    private func jumpToSearchMatch() {
-        guard currentSearchMatchIndex >= 0, currentSearchMatchIndex < searchMatches.count else { return }
-        let row = searchMatches[currentSearchMatchIndex]
-        let index = IndexSet(integer: row)
-        leftCodeTable.selectRowIndexes(index, byExtendingSelection: false)
-        rightCodeTable.selectRowIndexes(index, byExtendingSelection: false)
-        leftCodeTable.scrollRowToVisible(row)
-        rightCodeTable.scrollRowToVisible(row)
-        searchCountLabel.stringValue = "\(currentSearchMatchIndex + 1)/\(searchMatches.count)"
-    }
-
-    func controlTextDidChange(_ obj: Notification) {
-        updateSearchMatches(jumpToFirst: true)
-    }
-
-    func control(_ control: NSControl, textView: NSTextView, doCommandBy commandSelector: Selector) -> Bool {
-        if commandSelector == #selector(NSResponder.insertNewline(_:)) {
-            let shift = NSApp.currentEvent?.modifierFlags.contains(.shift) == true
-            moveSearchMatch(forward: !shift)
-            return true
-        }
-        if commandSelector == #selector(NSResponder.cancelOperation(_:)) {
-            hideSearchBar()
-            return true
-        }
-        return false
     }
 
     private func updateDiffButtonsEnabled() {

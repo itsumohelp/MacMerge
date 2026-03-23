@@ -56,7 +56,7 @@ final class WelcomeViewController: NSViewController {
 
     override func loadView() {
         view = dropZone
-        view.frame = NSRect(x: 0, y: 0, width: 1200, height: 800)
+        view.frame = NSRect(x: 0, y: 0, width: 600, height: 400)
     }
 
     override func viewDidLoad() {

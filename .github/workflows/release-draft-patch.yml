@@ -32,6 +32,21 @@ jobs:
           NEXT_TAG="v${MAJOR}.${MINOR}.$((PATCH + 1))"
           echo "target_tag=$NEXT_TAG" >> "$GITHUB_OUTPUT"
 
+      - name: Extract release notes from CHANGELOG
+        id: notes
+        shell: bash
+        run: |
+          set -euo pipefail
+          TAG="${{ steps.resolve.outputs.target_tag }}"
+          NOTES="$(awk "/^## ${TAG}$/{found=1; next} found && /^## /{exit} found{print}" CHANGELOG.md)"
+          if [ -z "$NOTES" ]; then
+            echo "CHANGELOG section not found for ${TAG}" >&2
+            exit 1
+          fi
+          echo "release_notes<<EOF" >> "$GITHUB_OUTPUT"
+          echo "$NOTES" >> "$GITHUB_OUTPUT"
+          echo "EOF" >> "$GITHUB_OUTPUT"
+
       - name: Import Apple certificate
         env:
           APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
@@ -126,7 +141,5 @@ jobs:
           target_commitish: main
           name: ${{ steps.resolve.outputs.target_tag }}
           draft: true
-          body: |
-            Mode: patch (main からの通常リリース)
-            target_tag: `${{ steps.resolve.outputs.target_tag }}`
+          body: ${{ steps.notes.outputs.release_notes }}
           files: dist/*.dmg
