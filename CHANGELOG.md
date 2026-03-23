@@ -1,5 +1,27 @@
 # Changelog
 
+## v2.0.2
+
+### English
+
+#### Improvements
+- **Reload button in compare views** — Added `⟳ Reload` to both file diff view and directory compare view to refresh from current files.
+- **Reload shortcut alignment** — `Cmd+R` now reloads in both file diff and directory compare views with the same behavior as the button.
+- **Open file diff in new window from directory compare** — Selecting a changed file in directory compare now opens its diff in a separate window (no forced back-to-top navigation).
+
+#### Testing
+- **Launch smoke test** — Added one XCTest scenario to verify app launch creates an initial window controller.
+
+### 日本語
+
+#### 改善
+- **比較画面に再読み込みボタン追加** — ファイル比較ビュー / ディレクトリ比較ビューの両方に `⟳ 再読み込み` を追加し、現在のファイル内容を再読込できるようにしました。
+- **再読み込みショートカット統一** — 両ビューで `Cmd+R` による再読み込みをボタン押下と同一動作に統一しました。
+- **ディレクトリ比較からの差分表示を別ウィンドウ化** — 変更ファイル選択時は別ウィンドウで差分を開くようにし、戻る操作でトップへ戻ってしまうストレスを解消しました。
+
+#### テスト
+- **起動スモークテスト追加** — アプリ起動時に初期ウィンドウコントローラが作成されることを確認する XCTest を1シナリオ追加しました。
+
 ## v2.0.1
 
 ### English

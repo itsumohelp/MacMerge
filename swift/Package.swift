@@ -11,6 +11,11 @@ let package = Package(
             resources: [
                 .copy("Resources/icon.icns")
             ]
+        ),
+        .testTarget(
+            name: "MacMergeTests",
+            dependencies: ["MacMerge"],
+            path: "Tests/MacMergeTests"
         )
     ]
 )

@@ -26,6 +26,7 @@ final class DirCompareViewController: NSViewController {
     private let countLabel = NSTextField(labelWithString: "")
     private let leftLabel  = NSTextField(labelWithString: "")
     private let rightLabel = NSTextField(labelWithString: "")
+    private let reloadButton = NSButton(title: "⟳ 再読み込み", target: nil, action: nil)
     private var shortcutMonitor: Any?
 
     // MARK: - Init
@@ -76,6 +77,11 @@ final class DirCompareViewController: NSViewController {
         let backBtn = NSButton(title: "← 戻る", target: self, action: #selector(goBack))
         backBtn.bezelStyle = .rounded
         backBtn.translatesAutoresizingMaskIntoConstraints = false
+        reloadButton.target = self
+        reloadButton.action = #selector(reloadComparison)
+        reloadButton.bezelStyle = .rounded
+        reloadButton.font = .systemFont(ofSize: 11, weight: .regular)
+        reloadButton.translatesAutoresizingMaskIntoConstraints = false
 
         for lbl in [leftLabel, rightLabel] {
             lbl.font = .systemFont(ofSize: 11, weight: .medium)
@@ -88,7 +94,7 @@ final class DirCompareViewController: NSViewController {
         countLabel.textColor = .tertiaryLabelColor
         countLabel.translatesAutoresizingMaskIntoConstraints = false
 
-        for v in [backBtn, leftLabel, rightLabel, countLabel] as [NSView] {
+        for v in [backBtn, reloadButton, leftLabel, rightLabel, countLabel] as [NSView] {
             header.addSubview(v)
         }
         view.addSubview(header)
@@ -144,9 +150,11 @@ final class DirCompareViewController: NSViewController {
 
             backBtn.centerYAnchor.constraint(equalTo: header.centerYAnchor),
             backBtn.leadingAnchor.constraint(equalTo: header.leadingAnchor, constant: 12),
+            reloadButton.centerYAnchor.constraint(equalTo: header.centerYAnchor),
+            reloadButton.leadingAnchor.constraint(equalTo: backBtn.trailingAnchor, constant: 8),
 
             leftLabel.centerYAnchor.constraint(equalTo: header.centerYAnchor),
-            leftLabel.leadingAnchor.constraint(equalTo: backBtn.trailingAnchor, constant: 16),
+            leftLabel.leadingAnchor.constraint(equalTo: reloadButton.trailingAnchor, constant: 16),
             leftLabel.trailingAnchor.constraint(lessThanOrEqualTo: header.centerXAnchor, constant: -8),
 
             rightLabel.centerYAnchor.constraint(equalTo: header.centerYAnchor),
@@ -176,8 +184,13 @@ final class DirCompareViewController: NSViewController {
 
     // MARK: - Load
 
+    @objc private func reloadComparison() {
+        loadComparison()
+    }
+
     private func loadComparison() {
         spinner.startAnimation(nil)
+        spinner.isHidden = false
         guard let left = leftURL, let right = rightURL else { return }
 
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
@@ -246,7 +259,7 @@ final class DirCompareViewController: NSViewController {
                   let key = event.charactersIgnoringModifiers?.lowercased() else { return event }
             switch key {
             case "r":
-                self.loadComparison()
+                self.reloadComparison()
                 return nil
             case "w":
                 self.view.window?.performClose(nil)
@@ -330,7 +343,7 @@ extension DirCompareViewController: NSTableViewDataSource, NSTableViewDelegate {
         switch entry.status {
         case .changed:
             guard let l = entry.leftURL, let r = entry.rightURL else { return }
-            (view.window?.windowController as? WindowController)?.showDiff(left: l, right: r)
+            (NSApp.delegate as? AppDelegate)?.openFileDiffWindow(left: l, right: r)
             tableView.deselectRow(row)
 
         case .binaryDiff:
