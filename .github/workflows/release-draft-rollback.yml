@@ -68,6 +68,21 @@ jobs:
           ref: ${{ steps.resolve.outputs.source_tag }}
           fetch-depth: 0
 
+      - name: Extract release notes from CHANGELOG
+        id: notes
+        shell: bash
+        run: |
+          set -euo pipefail
+          TAG="${{ steps.resolve.outputs.target_tag }}"
+          NOTES="$(awk "/^## ${TAG}$/{found=1; next} found && /^## /{exit} found{print}" CHANGELOG.md)"
+          if [ -z "$NOTES" ]; then
+            echo "CHANGELOG section not found for ${TAG}" >&2
+            exit 1
+          fi
+          echo "release_notes<<EOF" >> "$GITHUB_OUTPUT"
+          echo "$NOTES" >> "$GITHUB_OUTPUT"
+          echo "EOF" >> "$GITHUB_OUTPUT"
+
       - name: Import Apple certificate
         env:
           APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
@@ -162,8 +177,5 @@ jobs:
           target_commitish: main
           name: ${{ steps.resolve.outputs.target_tag }} (rollback from ${{ steps.resolve.outputs.source_tag }})
           draft: true
-          body: |
-            Mode: rollback
-            source_tag: `${{ steps.resolve.outputs.source_tag }}`
-            target_tag: `${{ steps.resolve.outputs.target_tag }}`
+          body: ${{ steps.notes.outputs.release_notes }}
           files: dist/*.dmg

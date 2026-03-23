@@ -1,5 +1,29 @@
 # Changelog
 
+## v2.0.3
+
+### English
+
+#### Improvements
+- **Diff search UI removed** — Removed the in-view search input from the file diff screen to avoid header overlap and simplify the UI.
+- **Window resize behavior improved** — Long file names in headers no longer force horizontal expansion, so manual resize/shrink works reliably.
+- **Smaller initial window size** — Adjusted startup window and view base sizes to open at a smaller default size.
+
+#### CI/CD
+- **Draft-only build flow** — Updated release workflow trigger so build/release runs only when manually creating a draft release, avoiding duplicate builds at publish time.
+- **Draft description from CHANGELOG** — Draft release body now pulls content from the matching `CHANGELOG.md` section instead of fixed text.
+
+### 日本語
+
+#### 改善
+- **差分検索UIを削除** — ヘッダーとの重なりを避けるため、ファイル差分画面の検索入力欄を削除しました。
+- **ウィンドウリサイズ挙動を改善** — 長いファイル名でもヘッダーが横方向に押し広げず、手動の拡大/縮小が効くようにしました。
+- **初期ウィンドウサイズを縮小** — 起動時のデフォルトサイズと各ビュー初期サイズを小さめに調整しました。
+
+#### CI/CD
+- **Draft時のみビルドする運用へ変更** — リリースworkflowのトリガーを見直し、公開時の重複ビルドを避けるようにしました。
+- **Draft本文をCHANGELOG連携** — 固定文ではなく、対象バージョンの `CHANGELOG.md` セクションを下書き本文に利用するようにしました。
+
 ## v2.0.2
 
 ### English
