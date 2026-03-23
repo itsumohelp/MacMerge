@@ -244,6 +244,7 @@ final class DiffViewController: NSViewController, NSSearchFieldDelegate {
     private let searchBar = NSView()
     private let searchField = NSSearchField()
     private let searchCountLabel = NSTextField(labelWithString: "0/0")
+    private let reloadButton = NSButton(title: "⟳ 再読み込み", target: nil, action: nil)
     private let prevDiffButton = NSButton(title: "◀ 差分", target: nil, action: nil)
     private let nextDiffButton = NSButton(title: "差分 ▶", target: nil, action: nil)
     private var searchBarHeight: NSLayoutConstraint!
@@ -320,6 +321,11 @@ final class DiffViewController: NSViewController, NSSearchFieldDelegate {
         let backBtn = NSButton(title: "← 戻る", target: self, action: #selector(goBack))
         backBtn.bezelStyle = .rounded
         backBtn.translatesAutoresizingMaskIntoConstraints = false
+        reloadButton.target = self
+        reloadButton.action = #selector(reloadComparison)
+        reloadButton.bezelStyle = .rounded
+        reloadButton.font = .systemFont(ofSize: 11, weight: .regular)
+        reloadButton.translatesAutoresizingMaskIntoConstraints = false
         prevDiffButton.target = self
         prevDiffButton.action = #selector(goPrevDiff)
         prevDiffButton.bezelStyle = .rounded
@@ -337,6 +343,7 @@ final class DiffViewController: NSViewController, NSSearchFieldDelegate {
             lbl.translatesAutoresizingMaskIntoConstraints = false
         }
         header.addSubview(backBtn)
+        header.addSubview(reloadButton)
         header.addSubview(prevDiffButton)
         header.addSubview(nextDiffButton)
         header.addSubview(leftLabel)
@@ -426,8 +433,10 @@ final class DiffViewController: NSViewController, NSSearchFieldDelegate {
             header.heightAnchor.constraint(equalToConstant: 40),
             backBtn.centerYAnchor.constraint(equalTo: header.centerYAnchor),
             backBtn.leadingAnchor.constraint(equalTo: header.leadingAnchor, constant: 12),
+            reloadButton.centerYAnchor.constraint(equalTo: header.centerYAnchor),
+            reloadButton.leadingAnchor.constraint(equalTo: backBtn.trailingAnchor, constant: 8),
             prevDiffButton.centerYAnchor.constraint(equalTo: header.centerYAnchor),
-            prevDiffButton.leadingAnchor.constraint(equalTo: backBtn.trailingAnchor, constant: 8),
+            prevDiffButton.leadingAnchor.constraint(equalTo: reloadButton.trailingAnchor, constant: 8),
             nextDiffButton.centerYAnchor.constraint(equalTo: header.centerYAnchor),
             nextDiffButton.leadingAnchor.constraint(equalTo: prevDiffButton.trailingAnchor, constant: 6),
             leftLabel.centerYAnchor.constraint(equalTo: header.centerYAnchor),
