@@ -1,5 +1,31 @@
 # Changelog
 
+## v2.0.5
+
+### English
+
+#### Improvements
+- **Diff jump start behavior fixed** — The first “Next diff” action after opening a file now jumps to the first diff block (instead of skipping to the second).
+- **Minimap progress indicator** — Added always-visible `current/total` diff progress (e.g. `3/12`) near the minimap.
+- **Sidebar instant filters** — Added directory sidebar filters: `All / Changed only / Hide same / Left only / Right only / Binary`.
+- **Directory header cleanup** — Removed unintended top-header path text display in directory view.
+
+#### Settings
+- **Persistent settings file** — App settings are now saved to a physical JSON file and restored on next launch.
+  - Path: `~/Library/Application Support/MacMerge/settings.json`
+
+### 日本語
+
+#### 改善
+- **差分ジャンプ開始位置を修正** — ファイルを開いた直後の「次の差分」で、2番目ではなく先頭の差分へ移動するようにしました。
+- **ミニマップ進捗表示を追加** — ミニマップ付近に `現在/全体`（例: `3/12`）を常時表示するようにしました。
+- **サイドバー即時フィルタを追加** — ディレクトリビューに `すべて / 変更のみ / 同一を隠す / 左のみ / 右のみ / バイナリ` を追加しました。
+- **ディレクトリヘッダー表示を整理** — 上部に不要表示されていた文字列を出さないようにしました。
+
+#### 設定
+- **設定の永続化をファイル保存化** — 設定を物理ファイル（JSON）へ保存し、再起動後も保持されるようにしました。
+  - 保存先: `~/Library/Application Support/MacMerge/settings.json`
+
 ## v2.0.4
 
 ### English
