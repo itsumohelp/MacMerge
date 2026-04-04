@@ -24,6 +24,14 @@ private final class DirRowView: NSTableRowView {
 // MARK: - DirCompareViewController
 
 final class DirCompareViewController: NSViewController {
+    private enum SidebarFilter: Int {
+        case all = 0
+        case changedOnly
+        case hideSame
+        case leftOnly
+        case rightOnly
+        case binaryOnly
+    }
 
     var leftURL:  URL?
     var rightURL: URL?
@@ -36,6 +44,7 @@ final class DirCompareViewController: NSViewController {
     private let countLabel = NSTextField(labelWithString: "")
     private let leftLabel  = NSTextField(labelWithString: "")
     private let rightLabel = NSTextField(labelWithString: "")
+    private let filterPopup = NSPopUpButton(frame: .zero, pullsDown: false)
     private let reloadButton = NSButton(title: "⟳ 再読み込み", target: nil, action: nil)
     private let helpButton = NSButton(title: "？", target: nil, action: nil)
     private let splitView = NSSplitView()
@@ -45,6 +54,7 @@ final class DirCompareViewController: NSViewController {
     private var selectedPath: String?
     private var lastSelectedRow: Int = -1
     private var shortcutMonitor: Any?
+    private var currentFilter: SidebarFilter = .all
 
     // MARK: - Init
 
@@ -114,6 +124,17 @@ final class DirCompareViewController: NSViewController {
             lbl.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
             lbl.setContentHuggingPriority(.defaultLow, for: .horizontal)
         }
+        leftLabel.stringValue = ""
+        rightLabel.stringValue = ""
+        leftLabel.isHidden = true
+        rightLabel.isHidden = true
+
+        filterPopup.addItems(withTitles: ["すべて", "変更のみ", "同一を隠す", "左のみ", "右のみ", "バイナリ"])
+        filterPopup.selectItem(at: SidebarFilter.all.rawValue)
+        filterPopup.target = self
+        filterPopup.action = #selector(filterChanged)
+        filterPopup.font = .systemFont(ofSize: 11)
+        filterPopup.translatesAutoresizingMaskIntoConstraints = false
 
         countLabel.font = .systemFont(ofSize: 11)
         countLabel.textColor = .tertiaryLabelColor
@@ -123,7 +144,7 @@ final class DirCompareViewController: NSViewController {
         countLabel.setContentCompressionResistancePriority(.defaultHigh, for: .horizontal)
         countLabel.setContentHuggingPriority(.defaultHigh, for: .horizontal)
 
-        for v in [backBtn, reloadButton, leftLabel, rightLabel, countLabel, helpButton] as [NSView] {
+        for v in [backBtn, reloadButton, leftLabel, rightLabel, filterPopup, countLabel, helpButton] as [NSView] {
             header.addSubview(v)
         }
         view.addSubview(header)
@@ -201,13 +222,10 @@ final class DirCompareViewController: NSViewController {
             reloadButton.centerYAnchor.constraint(equalTo: header.centerYAnchor),
             reloadButton.leadingAnchor.constraint(equalTo: backBtn.trailingAnchor, constant: 8),
 
-            leftLabel.centerYAnchor.constraint(equalTo: header.centerYAnchor),
-            leftLabel.leadingAnchor.constraint(equalTo: reloadButton.trailingAnchor, constant: 16),
-            leftLabel.trailingAnchor.constraint(lessThanOrEqualTo: header.centerXAnchor, constant: -8),
-
-            rightLabel.centerYAnchor.constraint(equalTo: header.centerYAnchor),
-            rightLabel.leadingAnchor.constraint(equalTo: header.centerXAnchor, constant: 8),
-            rightLabel.trailingAnchor.constraint(lessThanOrEqualTo: countLabel.leadingAnchor, constant: -12),
+            filterPopup.centerYAnchor.constraint(equalTo: header.centerYAnchor),
+            filterPopup.leadingAnchor.constraint(equalTo: reloadButton.trailingAnchor, constant: 12),
+            filterPopup.widthAnchor.constraint(greaterThanOrEqualToConstant: 130),
+            filterPopup.trailingAnchor.constraint(lessThanOrEqualTo: countLabel.leadingAnchor, constant: -12),
 
             countLabel.centerYAnchor.constraint(equalTo: header.centerYAnchor),
             countLabel.trailingAnchor.constraint(equalTo: helpButton.leadingAnchor, constant: -8),
@@ -241,8 +259,6 @@ final class DirCompareViewController: NSViewController {
             previewPlaceholder.centerYAnchor.constraint(equalTo: previewPane.centerYAnchor),
         ])
 
-        leftLabel.stringValue  = leftURL?.lastPathComponent  ?? ""
-        rightLabel.stringValue = rightURL?.lastPathComponent ?? ""
     }
 
     // MARK: - Load
@@ -276,10 +292,23 @@ final class DirCompareViewController: NSViewController {
     }
 
     private func rebuildVisibleEntries() {
+        let includedFilePaths = Set(
+            allEntries
+                .filter { !$0.isDirectory && shouldIncludeFile(entry: $0) }
+                .map(\.relativePath)
+        )
+        let filtered = allEntries.filter { entry in
+            if entry.isDirectory {
+                let prefix = entry.relativePath + "/"
+                return includedFilePaths.contains(where: { $0.hasPrefix(prefix) })
+            }
+            return includedFilePaths.contains(entry.relativePath)
+        }
+
         var visible: [DirCompareEntry] = []
         var collapsedDepth: Int? = nil
 
-        for entry in allEntries {
+        for entry in filtered {
             if let d = collapsedDepth, entry.depth > d { continue }
             collapsedDepth = nil
             visible.append(entry)
@@ -288,6 +317,35 @@ final class DirCompareViewController: NSViewController {
             }
         }
         entries = visible
+    }
+
+    private func shouldIncludeFile(entry: DirCompareEntry) -> Bool {
+        guard !entry.isDirectory else { return true }
+        switch currentFilter {
+        case .all:
+            return true
+        case .changedOnly:
+            return entry.status == .changed
+        case .hideSame:
+            return entry.status != .same
+        case .leftOnly:
+            return entry.status == .leftOnly
+        case .rightOnly:
+            return entry.status == .rightOnly
+        case .binaryOnly:
+            return entry.status == .binaryDiff
+        }
+    }
+
+    @objc private func filterChanged() {
+        currentFilter = SidebarFilter(rawValue: filterPopup.indexOfSelectedItem) ?? .all
+        rebuildVisibleEntries()
+        tableView.reloadData()
+        restoreSelection()
+        if tableView.selectedRow < 0, !entries.isEmpty {
+            tableView.selectRowIndexes(IndexSet(integer: 0), byExtendingSelection: false)
+            lastSelectedRow = 0
+        }
     }
 
     private func toggleDirectory(atVisibleIndex row: Int) {

@@ -375,6 +375,7 @@ final class DiffViewController: NSViewController {
     private let leftInfoLabel = NSTextField(labelWithString: "")
     private let rightInfoLabel = NSTextField(labelWithString: "")
     private let miniMapOverlay = DiffMiniMapOverlayView()
+    private let diffProgressLabel = NSTextField(labelWithString: "0/0")
     private var shortcutMonitor: Any?
 
     // MARK: - Init
@@ -577,6 +578,14 @@ final class DiffViewController: NSViewController {
             self?.jumpToRow(row)
         }
         view.addSubview(miniMapOverlay)
+        diffProgressLabel.font = .monospacedDigitSystemFont(ofSize: 10, weight: .medium)
+        diffProgressLabel.textColor = .secondaryLabelColor
+        diffProgressLabel.alignment = .center
+        diffProgressLabel.wantsLayer = true
+        diffProgressLabel.layer?.backgroundColor = NSColor.windowBackgroundColor.withAlphaComponent(0.85).cgColor
+        diffProgressLabel.layer?.cornerRadius = 4
+        diffProgressLabel.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(diffProgressLabel)
 
         // ── Constraints ──────────────────────────────────────────
         leftNumW  = leftNumView.widthAnchor.constraint(equalToConstant: currentNumWidth)
@@ -679,6 +688,9 @@ final class DiffViewController: NSViewController {
             miniMapOverlay.bottomAnchor.constraint(equalTo: infoBar.topAnchor),
             miniMapOverlay.trailingAnchor.constraint(equalTo: view.trailingAnchor),
             miniMapOverlay.widthAnchor.constraint(equalToConstant: miniMapWidth),
+            diffProgressLabel.topAnchor.constraint(equalTo: miniMapOverlay.topAnchor, constant: 4),
+            diffProgressLabel.trailingAnchor.constraint(equalTo: miniMapOverlay.leadingAnchor, constant: -4),
+            diffProgressLabel.widthAnchor.constraint(greaterThanOrEqualToConstant: 44),
         ])
 
         // ── Scroll sync ──────────────────────────────────────────
@@ -758,7 +770,7 @@ final class DiffViewController: NSViewController {
     private func applyRows(_ result: [DiffRow]) {
         self.rows = result
         self.diffBlocks = buildDiffBlocks(from: result)
-        self.currentDiffBlockIndex = diffBlocks.isEmpty ? -1 : 0
+        self.currentDiffBlockIndex = -1
         self.leftNumView.rows  = result
         self.rightNumView.rows = result
         self.miniMapOverlay.rows = result
@@ -781,6 +793,7 @@ final class DiffViewController: NSViewController {
         self.updateCodeColumnWidth()
         self.syncLineNumberMetrics()
         self.updateMiniMapViewport()
+        self.updateDiffProgressLabel()
         updateDiffButtonsEnabled()
         if let forward = pendingBoundarySelectionForward {
             pendingBoundarySelectionForward = nil
@@ -1020,6 +1033,7 @@ final class DiffViewController: NSViewController {
         leftCodeTable.scrollRowToVisible(block.lowerBound)
         rightCodeTable.scrollRowToVisible(block.lowerBound)
         updateMiniMapViewport()
+        updateDiffProgressLabel()
     }
 
     private func showDiffBoundaryMessage(isLast: Bool) {
@@ -1069,6 +1083,7 @@ final class DiffViewController: NSViewController {
         leftCodeTable.scrollRowToVisible(block.lowerBound)
         rightCodeTable.scrollRowToVisible(block.lowerBound)
         updateMiniMapViewport()
+        updateDiffProgressLabel()
     }
 
     private func jumpToRow(_ row: Int) {
@@ -1088,6 +1103,7 @@ final class DiffViewController: NSViewController {
     private func updateMiniMapViewport() {
         guard rows.count > 0 else {
             miniMapOverlay.visibleRows = nil
+            updateDiffProgressLabel()
             return
         }
         let y = leftCodeScroll.contentView.bounds.origin.y
@@ -1096,6 +1112,12 @@ final class DiffViewController: NSViewController {
         let visibleCount = max(1, Int(ceil(leftCodeScroll.contentView.bounds.height / rowH)))
         let bottom = min(rows.count - 1, top + visibleCount - 1)
         miniMapOverlay.visibleRows = top...bottom
+    }
+
+    private func updateDiffProgressLabel() {
+        let total = diffBlocks.count
+        let current = (currentDiffBlockIndex >= 0 && currentDiffBlockIndex < total) ? (currentDiffBlockIndex + 1) : 0
+        diffProgressLabel.stringValue = "\(current)/\(total)"
     }
 
     @objc private func syncScroll(_ note: Notification) {
