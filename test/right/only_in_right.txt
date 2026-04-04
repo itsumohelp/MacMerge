@@ -1,0 +1,2 @@
+This file exists only in the right directory.
+It should appear as "added" in a diff view.

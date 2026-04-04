@@ -5,8 +5,20 @@ import AppKit
 final class DiffRowView: NSTableRowView {
     var style: CellStyle = .equal
     override var isEmphasized: Bool { get { false } set {} }
-    override func draw(_ dirtyRect: NSRect) { style.bgColor.setFill(); dirtyRect.fill() }
-    override func drawSelection(in dirtyRect: NSRect) {}
+    override func draw(_ dirtyRect: NSRect) {
+        style.bgColor.setFill()
+        dirtyRect.fill()
+        guard isSelected else { return }
+        NSColor.controlAccentColor.withAlphaComponent(0.28).setFill()
+        dirtyRect.fill()
+        NSColor.controlAccentColor.withAlphaComponent(0.95).setStroke()
+        let path = NSBezierPath(rect: dirtyRect.insetBy(dx: 0.5, dy: 0.5))
+        path.lineWidth = 1
+        path.stroke()
+    }
+    override func drawSelection(in dirtyRect: NSRect) {
+        // selection is rendered in draw(_:) for consistent visibility
+    }
 }
 
 // MARK: - LineNumberView
@@ -56,11 +68,66 @@ final class LineNumberView: NSView {
     }
 }
 
+// MARK: - DiffMiniMapOverlayView
+
+final class DiffMiniMapOverlayView: NSView {
+    var rows: [DiffRow] = [] { didSet { needsDisplay = true } }
+    var visibleRows: ClosedRange<Int>? { didSet { needsDisplay = true } }
+    var onSelectRow: ((Int) -> Void)?
+
+    override var isFlipped: Bool { true }
+
+    override func draw(_ dirtyRect: NSRect) {
+        guard !rows.isEmpty else { return }
+
+        let unit = max(bounds.height / CGFloat(rows.count), 1)
+        for (idx, row) in rows.enumerated() {
+            let changed = !(row.leftStyle == .equal && row.rightStyle == .equal)
+            guard changed else { continue }
+            markerColor(for: row).setFill()
+            let y = CGFloat(idx) * unit
+            NSRect(x: 2, y: y, width: max(1, bounds.width - 4), height: max(2, unit)).fill()
+        }
+
+        if let vr = visibleRows {
+            let y = CGFloat(vr.lowerBound) * unit
+            let h = max(6, CGFloat(vr.count) * unit)
+            let rect = NSRect(x: 0.5, y: y, width: bounds.width - 1, height: min(h, bounds.height - y))
+            NSColor.controlAccentColor.setStroke()
+            let p = NSBezierPath(rect: rect)
+            p.lineWidth = 1
+            p.stroke()
+        }
+    }
+
+    override func mouseDown(with event: NSEvent) { selectRow(from: event) }
+    override func mouseDragged(with event: NSEvent) { selectRow(from: event) }
+
+    private func selectRow(from event: NSEvent) {
+        guard !rows.isEmpty else { return }
+        let p = convert(event.locationInWindow, from: nil)
+        let ratio = min(max(p.y / max(bounds.height, 1), 0), 1)
+        let row = min(rows.count - 1, Int(ratio * CGFloat(rows.count)))
+        onSelectRow?(row)
+    }
+
+    private func markerColor(for row: DiffRow) -> NSColor {
+        if row.leftStyle == .removed || row.rightStyle == .removed {
+            return NSColor(red: 0.85, green: 0.35, blue: 0.40, alpha: 1)
+        }
+        if row.leftStyle == .added || row.rightStyle == .added {
+            return NSColor(red: 0.30, green: 0.72, blue: 0.40, alpha: 1)
+        }
+        return NSColor(red: 0.85, green: 0.68, blue: 0.22, alpha: 1)
+    }
+}
+
 // MARK: - CharDiffView
 
 final class CharDiffView: NSView {
     private let leftLabel   = NSTextField(labelWithString: "")
     private let rightLabel  = NSTextField(labelWithString: "")
+    private let closeButton = NSButton(title: "✕", target: nil, action: nil)
     private let leftScroll  = NSScrollView()
     private let rightScroll = NSScrollView()
     private let leftTV      = NSTextView()
@@ -68,6 +135,9 @@ final class CharDiffView: NSView {
     private let topSep      = NSView()
     private let midSep      = NSView()
     private var isSyncing   = false
+    private var leftScrollH: NSLayoutConstraint!
+    private var rightScrollH: NSLayoutConstraint!
+    var onClose: (() -> Void)?
 
     override init(frame: NSRect) { super.init(frame: frame); setup() }
     required init?(coder: NSCoder) { fatalError() }
@@ -84,7 +154,7 @@ final class CharDiffView: NSView {
             configureTV(tv)
             scroll.documentView          = tv
             scroll.hasHorizontalScroller = true
-            scroll.hasVerticalScroller   = false
+            scroll.hasVerticalScroller   = true
             scroll.autohidesScrollers    = true
             scroll.borderType            = .noBorder
             scroll.backgroundColor       = .white
@@ -95,11 +165,21 @@ final class CharDiffView: NSView {
             lbl.font = .systemFont(ofSize: 10, weight: .semibold)
             lbl.textColor = NSColor(calibratedWhite: 0.35, alpha: 1)
         }
+        closeButton.target = self
+        closeButton.action = #selector(closeTapped)
+        closeButton.bezelStyle = .texturedRounded
+        closeButton.controlSize = .small
+        closeButton.font = .systemFont(ofSize: 10, weight: .regular)
+
         for v in [topSep, leftLabel, leftScroll, midSep, rightLabel, rightScroll] as [NSView] {
             v.translatesAutoresizingMaskIntoConstraints = false
             addSubview(v)
         }
+        closeButton.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(closeButton, positioned: .above, relativeTo: leftScroll)
         let lineH: CGFloat = 26
+        leftScrollH = leftScroll.heightAnchor.constraint(equalToConstant: lineH)
+        rightScrollH = rightScroll.heightAnchor.constraint(equalToConstant: lineH)
         NSLayoutConstraint.activate([
             topSep.topAnchor.constraint(equalTo: topAnchor),
             topSep.leadingAnchor.constraint(equalTo: leadingAnchor),
@@ -108,11 +188,13 @@ final class CharDiffView: NSView {
 
             leftLabel.topAnchor.constraint(equalTo: topSep.bottomAnchor, constant: 2),
             leftLabel.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 8),
+            closeButton.centerYAnchor.constraint(equalTo: leftLabel.centerYAnchor),
+            closeButton.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -6),
 
             leftScroll.topAnchor.constraint(equalTo: topSep.bottomAnchor),
             leftScroll.leadingAnchor.constraint(equalTo: leadingAnchor),
             leftScroll.trailingAnchor.constraint(equalTo: trailingAnchor),
-            leftScroll.heightAnchor.constraint(equalToConstant: lineH),
+            leftScrollH,
 
             midSep.topAnchor.constraint(equalTo: leftScroll.bottomAnchor),
             midSep.leadingAnchor.constraint(equalTo: leadingAnchor),
@@ -125,7 +207,8 @@ final class CharDiffView: NSView {
             rightScroll.topAnchor.constraint(equalTo: midSep.bottomAnchor),
             rightScroll.leadingAnchor.constraint(equalTo: leadingAnchor),
             rightScroll.trailingAnchor.constraint(equalTo: trailingAnchor),
-            rightScroll.heightAnchor.constraint(equalToConstant: lineH),
+            rightScrollH,
+            rightScroll.bottomAnchor.constraint(equalTo: bottomAnchor),
         ])
 
         NotificationCenter.default.addObserver(
@@ -134,6 +217,18 @@ final class CharDiffView: NSView {
         NotificationCenter.default.addObserver(
             self, selector: #selector(syncH(_:)),
             name: NSView.boundsDidChangeNotification, object: rightScroll.contentView)
+    }
+
+    @objc private func closeTapped() {
+        onClose?()
+    }
+
+    func copySelectionIfPossible() -> Bool {
+        guard let responder = window?.firstResponder as? NSTextView else { return false }
+        guard responder === leftTV || responder === rightTV else { return false }
+        guard responder.selectedRange.length > 0 else { return false }
+        responder.copy(nil)
+        return true
     }
 
     @objc private func syncH(_ note: Notification) {
@@ -162,14 +257,37 @@ final class CharDiffView: NSView {
                                                         height: CGFloat.greatestFiniteMagnitude)
     }
 
-    func update(row: DiffRow) {
-        leftLabel.stringValue  = row.leftNum .map { "← 行 \($0)" } ?? "←"
-        rightLabel.stringValue = row.rightNum.map { "→ 行 \($0)" } ?? "→"
-        let (lR, rR) = charDiff(old: row.leftText, new: row.rightText)
+    func update(rows: [DiffRow]) {
+        guard !rows.isEmpty else {
+            leftLabel.stringValue = "←"
+            rightLabel.stringValue = "→"
+            leftTV.string = ""
+            rightTV.string = ""
+            leftScrollH.constant = 26
+            rightScrollH.constant = 26
+            return
+        }
+
+        leftLabel.stringValue = "← 行 \(lineRangeText(for: rows.compactMap(\.leftNum)))"
+        rightLabel.stringValue = "→ 行 \(lineRangeText(for: rows.compactMap(\.rightNum)))"
+
+        let leftText = rows.map(\.leftText).joined(separator: "\n")
+        let rightText = rows.map(\.rightText).joined(separator: "\n")
+        let (lR, rR) = charDiff(old: leftText, new: rightText)
         leftTV.textStorage?.setAttributedString(
-            makeAttr(row.leftText,  lR, NSColor(red: 0.95, green: 0.78, blue: 0.80, alpha: 1)))
+            makeAttr(leftText,  lR, NSColor(red: 0.95, green: 0.78, blue: 0.80, alpha: 1)))
         rightTV.textStorage?.setAttributedString(
-            makeAttr(row.rightText, rR, NSColor(red: 0.80, green: 0.93, blue: 0.84, alpha: 1)))
+            makeAttr(rightText, rR, NSColor(red: 0.80, green: 0.93, blue: 0.84, alpha: 1)))
+
+        let lines = max(rows.count, 1)
+        let h = CGFloat(min(max(lines, 1), 6)) * 20 + 8
+        leftScrollH.constant = h
+        rightScrollH.constant = h
+    }
+
+    private func lineRangeText(for nums: [Int]) -> String {
+        guard let first = nums.first, let last = nums.last else { return "-" }
+        return first == last ? "\(first)" : "\(first)-\(last)"
     }
 
     private func makeAttr(_ text: String, _ ranges: [NSRange], _ bg: NSColor) -> NSAttributedString {
@@ -237,18 +355,26 @@ final class DiffViewController: NSViewController {
 
     private var charDiffView:   CharDiffView!
     private var charDiffHeight: NSLayoutConstraint!
-    private let detailHeight: CGFloat = 56
 
     private let leftLabel  = NSTextField(labelWithString: "")
     private let rightLabel = NSTextField(labelWithString: "")
     private let reloadButton = NSButton(title: "⟳ 再読み込み", target: nil, action: nil)
+    private let leftCopyNameButton = NSButton(title: "📄", target: nil, action: nil)
+    private let leftCopyPathButton = NSButton(title: "📋", target: nil, action: nil)
+    private let rightCopyNameButton = NSButton(title: "📄", target: nil, action: nil)
+    private let rightCopyPathButton = NSButton(title: "📋", target: nil, action: nil)
+    private let helpButton = NSButton(title: "？", target: nil, action: nil)
     private let prevDiffButton = NSButton(title: "◀ 差分", target: nil, action: nil)
     private let nextDiffButton = NSButton(title: "差分 ▶", target: nil, action: nil)
-    private var diffRows: [Int] = []
-    private var currentDiffIndex: Int = -1
+    private var diffBlocks: [ClosedRange<Int>] = []
+    private var currentDiffBlockIndex: Int = -1
+    private var backAction: (() -> Void)?
+    private var crossFileDiffProvider: ((Bool) -> (URL, URL)?)?
+    private var pendingBoundarySelectionForward: Bool?
     private let infoBar = NSView()
     private let leftInfoLabel = NSTextField(labelWithString: "")
     private let rightInfoLabel = NSTextField(labelWithString: "")
+    private let miniMapOverlay = DiffMiniMapOverlayView()
     private var shortcutMonitor: Any?
 
     // MARK: - Init
@@ -266,6 +392,21 @@ final class DiffViewController: NSViewController {
         rightInputText = rightText
         leftTitleText = "入力（左）"
         rightTitleText = "入力（右）"
+    }
+
+    convenience init(left: URL, right: URL, backAction: (() -> Void)?) {
+        self.init(left: left, right: right)
+        self.backAction = backAction
+    }
+
+    convenience init(
+        left: URL,
+        right: URL,
+        backAction: (() -> Void)?,
+        crossFileDiffProvider: ((Bool) -> (URL, URL)?)?
+    ) {
+        self.init(left: left, right: right, backAction: backAction)
+        self.crossFileDiffProvider = crossFileDiffProvider
     }
 
     // MARK: - Lifecycle
@@ -306,6 +447,7 @@ final class DiffViewController: NSViewController {
 
     private func buildUI() {
         let contentTopSpacing: CGFloat = 6
+        let miniMapWidth: CGFloat = 12
         // ── Header ──────────────────────────────────────────────
         let header = NSView()
         header.wantsLayer = true
@@ -329,6 +471,28 @@ final class DiffViewController: NSViewController {
         nextDiffButton.bezelStyle = .rounded
         nextDiffButton.font = .systemFont(ofSize: 11, weight: .regular)
         nextDiffButton.translatesAutoresizingMaskIntoConstraints = false
+        leftCopyNameButton.target = self
+        leftCopyNameButton.action = #selector(copyLeftFileName)
+        leftCopyPathButton.target = self
+        leftCopyPathButton.action = #selector(copyLeftFullPath)
+        rightCopyNameButton.target = self
+        rightCopyNameButton.action = #selector(copyRightFileName)
+        rightCopyPathButton.target = self
+        rightCopyPathButton.action = #selector(copyRightFullPath)
+        helpButton.target = self
+        helpButton.action = #selector(showHelpDialog)
+        for b in [leftCopyNameButton, leftCopyPathButton, rightCopyNameButton, rightCopyPathButton] {
+            b.bezelStyle = .rounded
+            b.font = .systemFont(ofSize: 11, weight: .regular)
+            b.translatesAutoresizingMaskIntoConstraints = false
+        }
+        helpButton.bezelStyle = .rounded
+        helpButton.font = .systemFont(ofSize: 12, weight: .bold)
+        helpButton.translatesAutoresizingMaskIntoConstraints = false
+        leftCopyNameButton.toolTip = "左ファイル名をコピー"
+        leftCopyPathButton.toolTip = "左フルパスをコピー"
+        rightCopyNameButton.toolTip = "右ファイル名をコピー"
+        rightCopyPathButton.toolTip = "右フルパスをコピー"
         for lbl in [leftLabel, rightLabel] {
             lbl.font = .systemFont(ofSize: 11, weight: .medium)
             lbl.textColor = .secondaryLabelColor
@@ -341,6 +505,11 @@ final class DiffViewController: NSViewController {
         header.addSubview(reloadButton)
         header.addSubview(prevDiffButton)
         header.addSubview(nextDiffButton)
+        header.addSubview(leftCopyNameButton)
+        header.addSubview(leftCopyPathButton)
+        header.addSubview(rightCopyNameButton)
+        header.addSubview(rightCopyPathButton)
+        header.addSubview(helpButton)
         header.addSubview(leftLabel)
         header.addSubview(rightLabel)
         view.addSubview(header)
@@ -362,7 +531,6 @@ final class DiffViewController: NSViewController {
             v.translatesAutoresizingMaskIntoConstraints = false
             view.addSubview(v)
         }
-
         // ── Divider ──────────────────────────────────────────────
         let div = NSView()
         div.wantsLayer = true
@@ -396,9 +564,19 @@ final class DiffViewController: NSViewController {
 
         // ── Char diff panel ──────────────────────────────────────
         charDiffView = CharDiffView()
+        charDiffView.onClose = { [weak self] in
+            self?.hideDetail()
+        }
         charDiffView.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(charDiffView)
         charDiffHeight = charDiffView.heightAnchor.constraint(equalToConstant: 0)
+
+        // ── Overlay minimap (does not affect existing table layout) ──────────
+        miniMapOverlay.translatesAutoresizingMaskIntoConstraints = false
+        miniMapOverlay.onSelectRow = { [weak self] row in
+            self?.jumpToRow(row)
+        }
+        view.addSubview(miniMapOverlay)
 
         // ── Constraints ──────────────────────────────────────────
         leftNumW  = leftNumView.widthAnchor.constraint(equalToConstant: currentNumWidth)
@@ -419,11 +597,26 @@ final class DiffViewController: NSViewController {
             nextDiffButton.centerYAnchor.constraint(equalTo: header.centerYAnchor),
             nextDiffButton.leadingAnchor.constraint(equalTo: prevDiffButton.trailingAnchor, constant: 6),
             leftLabel.centerYAnchor.constraint(equalTo: header.centerYAnchor),
-            leftLabel.leadingAnchor.constraint(equalTo: nextDiffButton.trailingAnchor, constant: 12),
-            leftLabel.trailingAnchor.constraint(lessThanOrEqualTo: header.centerXAnchor, constant: -8),
+            leftLabel.leadingAnchor.constraint(equalTo: nextDiffButton.trailingAnchor, constant: 8),
+            leftCopyNameButton.centerYAnchor.constraint(equalTo: header.centerYAnchor),
+            leftCopyNameButton.leadingAnchor.constraint(equalTo: leftLabel.trailingAnchor, constant: 4),
+            leftCopyNameButton.widthAnchor.constraint(equalToConstant: 26),
+            leftCopyPathButton.centerYAnchor.constraint(equalTo: header.centerYAnchor),
+            leftCopyPathButton.leadingAnchor.constraint(equalTo: leftCopyNameButton.trailingAnchor, constant: 4),
+            leftCopyPathButton.widthAnchor.constraint(equalToConstant: 26),
+            leftCopyPathButton.trailingAnchor.constraint(lessThanOrEqualTo: header.centerXAnchor, constant: -8),
             rightLabel.centerYAnchor.constraint(equalTo: header.centerYAnchor),
             rightLabel.leadingAnchor.constraint(equalTo: header.centerXAnchor, constant: 8),
-            rightLabel.trailingAnchor.constraint(lessThanOrEqualTo: header.trailingAnchor, constant: -12),
+            rightCopyNameButton.centerYAnchor.constraint(equalTo: header.centerYAnchor),
+            rightCopyNameButton.leadingAnchor.constraint(equalTo: rightLabel.trailingAnchor, constant: 4),
+            rightCopyNameButton.widthAnchor.constraint(equalToConstant: 26),
+            rightCopyPathButton.centerYAnchor.constraint(equalTo: header.centerYAnchor),
+            rightCopyPathButton.leadingAnchor.constraint(equalTo: rightCopyNameButton.trailingAnchor, constant: 4),
+            rightCopyPathButton.widthAnchor.constraint(equalToConstant: 26),
+            rightCopyPathButton.trailingAnchor.constraint(lessThanOrEqualTo: helpButton.leadingAnchor, constant: -6),
+            helpButton.centerYAnchor.constraint(equalTo: header.centerYAnchor),
+            helpButton.trailingAnchor.constraint(equalTo: header.trailingAnchor, constant: -10),
+            helpButton.widthAnchor.constraint(equalToConstant: 26),
 
             // Divider
             div.topAnchor.constraint(equalTo: header.bottomAnchor, constant: contentTopSpacing),
@@ -480,6 +673,12 @@ final class DiffViewController: NSViewController {
             charDiffView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             charDiffView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
             charDiffView.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+
+            // Overlay minimap
+            miniMapOverlay.topAnchor.constraint(equalTo: header.bottomAnchor, constant: contentTopSpacing),
+            miniMapOverlay.bottomAnchor.constraint(equalTo: infoBar.topAnchor),
+            miniMapOverlay.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            miniMapOverlay.widthAnchor.constraint(equalToConstant: miniMapWidth),
         ])
 
         // ── Scroll sync ──────────────────────────────────────────
@@ -500,6 +699,7 @@ final class DiffViewController: NSViewController {
         sv.autohidesScrollers    = true
         sv.borderType            = .noBorder
         sv.backgroundColor       = CellStyle.equal.bgColor
+        sv.drawsBackground       = true
         return sv
     }
 
@@ -521,17 +721,30 @@ final class DiffViewController: NSViewController {
     // MARK: - Load data
 
     private func loadDiff(left: URL, right: URL) {
+        leftURL = left
+        rightURL = right
+        leftTitleText = left.path
+        rightTitleText = right.path
         leftLabel.stringValue  = leftTitleText
         rightLabel.stringValue = rightTitleText
         DispatchQueue.global(qos: .userInitiated).async {
-            let lText  = (try? String(contentsOf: left,  encoding: .utf8)) ?? ""
-            let rText  = (try? String(contentsOf: right, encoding: .utf8)) ?? ""
+            let lText  = self.readTextForDiff(from: left)
+            let rText  = self.readTextForDiff(from: right)
             let result = DiffEngine.compute(left: lText, right: rText)
             DispatchQueue.main.async {
                 self.updateInfoBar(leftText: lText, rightText: rText)
                 self.applyRows(result)
             }
         }
+    }
+
+    private func readTextForDiff(from url: URL) -> String {
+        guard let data = try? Data(contentsOf: url, options: .mappedIfSafe) else { return "" }
+        if let s = String(data: data, encoding: .utf8) { return s }
+        if let s = String(data: data, encoding: .utf16) { return s }
+        if let s = String(data: data, encoding: .shiftJIS) { return s }
+        if let s = String(data: data, encoding: .japaneseEUC) { return s }
+        return String(decoding: data, as: UTF8.self)
     }
 
     private func loadDiff(leftText: String, rightText: String) {
@@ -544,20 +757,37 @@ final class DiffViewController: NSViewController {
 
     private func applyRows(_ result: [DiffRow]) {
         self.rows = result
-        self.diffRows = result.enumerated().compactMap { idx, row in
-            (row.leftStyle == .equal && row.rightStyle == .equal) ? nil : idx
-        }
-        self.currentDiffIndex = diffRows.isEmpty ? -1 : 0
+        self.diffBlocks = buildDiffBlocks(from: result)
+        self.currentDiffBlockIndex = diffBlocks.isEmpty ? -1 : 0
         self.leftNumView.rows  = result
         self.rightNumView.rows = result
+        self.miniMapOverlay.rows = result
         self.leftNumView.needsDisplay  = true
         self.rightNumView.needsDisplay = true
         self.leftCodeTable.reloadData()
         self.rightCodeTable.reloadData()
+        // Always reset to top on new diff load to avoid stale off-screen scroll offsets.
+        if !result.isEmpty {
+            self.leftCodeTable.scrollRowToVisible(0)
+            self.rightCodeTable.scrollRowToVisible(0)
+        }
+        self.leftCodeTable.deselectAll(nil)
+        self.rightCodeTable.deselectAll(nil)
+        self.leftCodeScroll.contentView.scroll(to: .zero)
+        self.rightCodeScroll.contentView.scroll(to: .zero)
+        self.leftCodeScroll.reflectScrolledClipView(self.leftCodeScroll.contentView)
+        self.rightCodeScroll.reflectScrolledClipView(self.rightCodeScroll.contentView)
         self.updateNumWidth()
         self.updateCodeColumnWidth()
         self.syncLineNumberMetrics()
+        self.updateMiniMapViewport()
         updateDiffButtonsEnabled()
+        if let forward = pendingBoundarySelectionForward {
+            pendingBoundarySelectionForward = nil
+            if !diffBlocks.isEmpty {
+                selectDiffBlock(at: forward ? 0 : (diffBlocks.count - 1))
+            }
+        }
     }
 
     private func updateCodeColumnWidth() {
@@ -621,6 +851,10 @@ final class DiffViewController: NSViewController {
     // MARK: - Actions
 
     @objc private func goBack() {
+        if let backAction {
+            backAction()
+            return
+        }
         (view.window?.windowController as? WindowController)?.pop()
     }
 
@@ -632,13 +866,80 @@ final class DiffViewController: NSViewController {
         }
     }
 
+    private func copyText(_ text: String) {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(text, forType: .string)
+    }
+
+    @objc private func copyLeftFileName() {
+        copyText(leftURL?.lastPathComponent ?? leftTitleText)
+    }
+
+    @objc private func copyLeftFullPath() {
+        copyText(leftURL?.path ?? leftTitleText)
+    }
+
+    @objc private func copyRightFileName() {
+        copyText(rightURL?.lastPathComponent ?? rightTitleText)
+    }
+
+    @objc private func copyRightFullPath() {
+        copyText(rightURL?.path ?? rightTitleText)
+    }
+
+    @objc private func showHelpDialog() {
+        let text = """
+キーボードショートカット
+
+共通
+• Esc: 戻る
+• Cmd+R: 再読み込み
+• Cmd+W: ウィンドウを閉じる
+• Cmd+Q: 終了
+
+差分ビュー
+• Cmd+←: 前の差分へ
+• Cmd+→: 次の差分へ
+• 下部差分パネルでテキスト選択中に Cmd+C: コピー
+
+ディレクトリビュー
+• ↑/↓: 選択移動
+• ←/→: ディレクトリ折りたたみ/展開
+• Enter: ファイルをプレビュー（ディレクトリは開閉）
+
+設定メニュー（上部メニュー > 設定）
+• 最初/最後到達メッセージを表示（ON/OFF）
+• 差分移動で次/前ファイルへまたぐ（ON/OFF）
+"""
+        let alert = NSAlert()
+        alert.messageText = "ヘルプ"
+        alert.informativeText = text
+        alert.alertStyle = .informational
+        alert.runModal()
+    }
+
     private func installShortcutMonitorIfNeeded() {
         guard shortcutMonitor == nil else { return }
         shortcutMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
             guard let self else { return event }
             let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+            let plainFlags = flags.subtracting([.numericPad, .function])
+            if plainFlags.isEmpty {
+                switch event.keyCode {
+                case 53: // Esc
+                    self.goBack()
+                    return nil
+                default:
+                    break
+                }
+            }
             guard flags.contains(.command) else { return event }
             switch event.keyCode {
+            case 8: // C
+                if self.charDiffView.copySelectionIfPossible() {
+                    return nil
+                }
+                return event
             case 15: // R
                 self.reloadComparison()
                 return nil
@@ -648,10 +949,10 @@ final class DiffViewController: NSViewController {
             case 12: // Q
                 NSApp.terminate(nil)
                 return nil
-            case 126: // up
+            case 123: // left
                 self.goPrevDiff()
                 return nil
-            case 125: // down
+            case 124: // right
                 self.goNextDiff()
                 return nil
             default:
@@ -668,7 +969,7 @@ final class DiffViewController: NSViewController {
     }
 
     private func updateDiffButtonsEnabled() {
-        let enabled = !diffRows.isEmpty
+        let enabled = !diffBlocks.isEmpty
         prevDiffButton.isEnabled = enabled
         nextDiffButton.isEnabled = enabled
     }
@@ -682,20 +983,119 @@ final class DiffViewController: NSViewController {
     }
 
     private func jumpDiff(forward: Bool) {
-        guard !diffRows.isEmpty else { return }
-        if currentDiffIndex < 0 {
-            currentDiffIndex = 0
-        } else if forward {
-            currentDiffIndex = (currentDiffIndex + 1) % diffRows.count
+        guard !diffBlocks.isEmpty else { return }
+        if currentDiffBlockIndex < 0 {
+            currentDiffBlockIndex = forward ? 0 : (diffBlocks.count - 1)
         } else {
-            currentDiffIndex = (currentDiffIndex - 1 + diffRows.count) % diffRows.count
+            if forward {
+                if currentDiffBlockIndex >= diffBlocks.count - 1 {
+                    if AppSettings.shared.crossFileDiffNavigation,
+                       let pair = crossFileDiffProvider?(true) {
+                        pendingBoundarySelectionForward = true
+                        loadDiff(left: pair.0, right: pair.1)
+                        return
+                    }
+                    showDiffBoundaryMessage(isLast: true)
+                    return
+                }
+                currentDiffBlockIndex += 1
+            } else {
+                if currentDiffBlockIndex <= 0 {
+                    if AppSettings.shared.crossFileDiffNavigation,
+                       let pair = crossFileDiffProvider?(false) {
+                        pendingBoundarySelectionForward = false
+                        loadDiff(left: pair.0, right: pair.1)
+                        return
+                    }
+                    showDiffBoundaryMessage(isLast: false)
+                    return
+                }
+                currentDiffBlockIndex -= 1
+            }
         }
-        let row = diffRows[currentDiffIndex]
+        let block = diffBlocks[currentDiffBlockIndex]
+        let index = IndexSet(integersIn: block)
+        leftCodeTable.selectRowIndexes(index, byExtendingSelection: false)
+        rightCodeTable.selectRowIndexes(index, byExtendingSelection: false)
+        leftCodeTable.scrollRowToVisible(block.lowerBound)
+        rightCodeTable.scrollRowToVisible(block.lowerBound)
+        updateMiniMapViewport()
+    }
+
+    private func showDiffBoundaryMessage(isLast: Bool) {
+        guard AppSettings.shared.showDiffBoundaryMessage else { return }
+        let alert = NSAlert()
+        alert.messageText = isLast ? "最後の差分に到達しました" : "最初の差分に到達しました"
+        alert.alertStyle = .informational
+        if let window = view.window {
+            alert.beginSheetModal(for: window, completionHandler: nil)
+        } else {
+            alert.runModal()
+        }
+    }
+
+    private func buildDiffBlocks(from rows: [DiffRow]) -> [ClosedRange<Int>] {
+        var blocks: [ClosedRange<Int>] = []
+        var start: Int?
+
+        for (idx, row) in rows.enumerated() {
+            let changed = !(row.leftStyle == .equal && row.rightStyle == .equal)
+            if changed {
+                if start == nil { start = idx }
+            } else if let s = start {
+                blocks.append(s...idx - 1)
+                start = nil
+            }
+        }
+
+        if let s = start, !rows.isEmpty {
+            blocks.append(s...(rows.count - 1))
+        }
+        return blocks
+    }
+
+    private func diffBlockIndex(containing row: Int) -> Int? {
+        guard row >= 0 else { return nil }
+        return diffBlocks.firstIndex(where: { $0.contains(row) })
+    }
+
+    private func selectDiffBlock(at index: Int) {
+        guard index >= 0, index < diffBlocks.count else { return }
+        currentDiffBlockIndex = index
+        let block = diffBlocks[index]
+        let selection = IndexSet(integersIn: block)
+        leftCodeTable.selectRowIndexes(selection, byExtendingSelection: false)
+        rightCodeTable.selectRowIndexes(selection, byExtendingSelection: false)
+        leftCodeTable.scrollRowToVisible(block.lowerBound)
+        rightCodeTable.scrollRowToVisible(block.lowerBound)
+        updateMiniMapViewport()
+    }
+
+    private func jumpToRow(_ row: Int) {
+        guard row >= 0, row < rows.count else { return }
+        if let blockIndex = diffBlockIndex(containing: row) {
+            selectDiffBlock(at: blockIndex)
+            return
+        }
         let index = IndexSet(integer: row)
         leftCodeTable.selectRowIndexes(index, byExtendingSelection: false)
         rightCodeTable.selectRowIndexes(index, byExtendingSelection: false)
         leftCodeTable.scrollRowToVisible(row)
         rightCodeTable.scrollRowToVisible(row)
+        updateMiniMapViewport()
+    }
+
+    private func updateMiniMapViewport() {
+        guard rows.count > 0 else {
+            miniMapOverlay.visibleRows = nil
+            return
+        }
+        let y = leftCodeScroll.contentView.bounds.origin.y
+        let rowH = max(leftCodeTable.rowHeight + leftCodeTable.intercellSpacing.height, 1)
+        let top = max(0, Int(y / rowH))
+        let visibleCount = max(1, Int(ceil(leftCodeScroll.contentView.bounds.height / rowH)))
+        let bottom = min(rows.count - 1, top + visibleCount - 1)
+        miniMapOverlay.visibleRows = top...bottom
     }
 
     @objc private func syncScroll(_ note: Notification) {
@@ -714,6 +1114,7 @@ final class DiffViewController: NSViewController {
         let y = origin.y
         leftNumView.scrollY  = y
         rightNumView.scrollY = y
+        updateMiniMapViewport()
 
         isSyncing = false
     }
@@ -758,20 +1159,35 @@ extension DiffViewController: NSTableViewDataSource, NSTableViewDelegate {
         guard row >= 0, row < rows.count else { hideDetail(); return }
 
         let dr    = rows[row]
-        let other = (tv === leftCodeTable) ? rightCodeTable : leftCodeTable
-        if other?.selectedRow != row {
-            other?.selectRowIndexes(IndexSet(integer: row), byExtendingSelection: false)
+        if dr.leftStyle == .equal && dr.rightStyle == .equal {
+            let other = (tv === leftCodeTable) ? rightCodeTable : leftCodeTable
+            if other?.selectedRow != row {
+                other?.selectRowIndexes(IndexSet(integer: row), byExtendingSelection: false)
+            }
+            hideDetail()
+            return
         }
 
-        if dr.leftStyle == .equal && dr.rightStyle == .equal { hideDetail() }
-        else { showDetail(for: dr) }
+        if let blockIndex = diffBlockIndex(containing: row) {
+            selectDiffBlock(at: blockIndex)
+            let block = diffBlocks[blockIndex]
+            showDetail(for: Array(rows[block]))
+        } else {
+            let other = (tv === leftCodeTable) ? rightCodeTable : leftCodeTable
+            if other?.selectedRow != row {
+                other?.selectRowIndexes(IndexSet(integer: row), byExtendingSelection: false)
+            }
+            showDetail(for: [dr])
+        }
     }
 
-    private func showDetail(for row: DiffRow) {
-        charDiffView.update(row: row)
-        guard charDiffHeight.constant == 0 else { return }
+    private func showDetail(for rows: [DiffRow]) {
+        charDiffView.update(rows: rows)
+        let lineCount = min(max(rows.count, 1), 6)
+        let targetHeight = 54 + CGFloat(lineCount) * 40
         NSAnimationContext.runAnimationGroup { $0.duration = 0.12
-            charDiffHeight.animator().constant = detailHeight }
+            charDiffHeight.animator().constant = targetHeight
+        }
     }
 
     private func hideDetail() {

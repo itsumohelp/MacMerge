@@ -64,7 +64,7 @@ struct DirScanner {
         guard let enumerator = fm.enumerator(
             at: base,
             includingPropertiesForKeys: [.isDirectoryKey, .isRegularFileKey],
-            options: [.skipsHiddenFiles]
+            options: []
         ) else { return ScannedTree(files: files, dirs: dirs) }
 
         for case let url as URL in enumerator {

@@ -1,0 +1,11 @@
+{
+  "name": "my-app",
+  "version": "1.0.0",
+  "debug": true,
+  "timeout": 30,
+  "database": {
+    "host": "localhost",
+    "port": 5432,
+    "name": "mydb"
+  }
+}

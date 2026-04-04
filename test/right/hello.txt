@@ -1,0 +1,6 @@
+Hello, World!
+This is the modified version.
+Line three is here.
+Line four: nothing changed.
+Line six: this was added instead.
+Extra line added at the end.

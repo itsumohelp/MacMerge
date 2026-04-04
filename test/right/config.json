@@ -1,0 +1,15 @@
+{
+  "name": "my-app",
+  "version": "2.0.0",
+  "debug": false,
+  "timeout": 60,
+  "database": {
+    "host": "db.example.com",
+    "port": 5432,
+    "name": "mydb_prod"
+  },
+  "cache": {
+    "enabled": true,
+    "ttl": 300
+  }
+}
