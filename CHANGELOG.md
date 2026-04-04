@@ -1,5 +1,41 @@
 # Changelog
 
+## v2.1.0
+
+### English
+
+#### Improvements
+- **Directory + diff split workflow** — Directory comparison now supports a sidebar layout with in-place file diff preview, so you can continue reviewing without repeatedly returning to a separate list screen.
+- **Block-focused diff detail view** — Continuous diff blocks are shown as multi-line detail, with clearer selected-row highlighting for easier tracking of the current diff context.
+- **Header copy actions for both sides** — Added per-side copy buttons in the diff header to copy file name or full path quickly.
+- **Keyboard/navigation refinement** — Improved directory keyboard navigation (`↑/↓/←/→`, `Enter`) and diff navigation shortcuts (`Cmd+←/Cmd+→`), with consistent behavior when moving across files.
+
+#### Settings
+- **New app Settings menu (macOS top menu)** — Added toggleable options:
+  - Show/hide boundary messages (“reached first/last diff”, default: ON)
+  - Enable/disable cross-file diff traversal at file boundaries
+- **Cross-file traversal sync** — When moving across files via diff navigation, returning to directory view keeps the selected file synchronized.
+
+#### Help
+- **Top-right help button (`？`)** — Added a shortcut/help dialog listing keyboard operations and the two Settings options.
+
+### 日本語
+
+#### 改善
+- **ディレクトリ＋差分の分割表示** — ディレクトリ比較をサイドバー化し、右ペインで差分プレビューできるようにしました。リスト画面へ戻る操作を減らして連続確認しやすくしています。
+- **連続差分ブロックの詳細表示を強化** — 連続差分は複数行で詳細表示し、選択中の差分行ハイライトも強化して現在位置を把握しやすくしました。
+- **左右それぞれのコピー操作を追加** — 差分ヘッダーに左右別のコピーアイコンを追加し、ファイル名/フルパスを個別にコピーできます。
+- **キーボード操作を整理** — ディレクトリ側（`↑/↓/←/→`, `Enter`）と差分側（`Cmd+←/Cmd+→`）の挙動を調整し、ファイルまたぎ移動も含めて一貫性を高めました。
+
+#### 設定
+- **上部メニューに設定を追加** — 以下をON/OFF可能にしました。
+  - 「最初/最後到達メッセージを表示」（デフォルトON）
+  - 「差分移動で次/前ファイルへまたぐ」
+- **ファイルまたぎ移動の選択同期** — 差分移動で別ファイルへ遷移した場合でも、ディレクトリ側へ戻った際に選択状態が連動するようにしました。
+
+#### ヘルプ
+- **右上 `？` ボタンを追加** — キーボードショートカット一覧と設定2項目の説明をダイアログで確認できます。
+
 ## v2.0.3
 
 ### English

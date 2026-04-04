@@ -1,0 +1,2 @@
+This file exists only in the left directory.
+It should appear as "deleted" in a diff view.
